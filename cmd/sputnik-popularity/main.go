@@ -1,11 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	influxdb2 "github.com/influxdata/influxdb-client-go"
+	"github.com/kelseyhightower/envconfig"
+
+	"github.com/alcortesm/sputnik-popularity/config"
 	"github.com/alcortesm/sputnik-popularity/pair"
 	"github.com/alcortesm/sputnik-popularity/web"
 )
@@ -13,6 +18,14 @@ import (
 func main() {
 	logger := log.New(os.Stdout, "",
 		log.Ldate|log.Ltime|log.LUTC)
+
+	var config config.Config
+	err := envconfig.Process("sputnik-popularity", &config)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	connectToInflux(config.InfluxDB, logger)
 
 	capacity := 5
 
@@ -66,4 +79,11 @@ func addDemoValues(p *web.Popularity, logger *log.Logger) {
 			logger.Fatalf("adding pair %v: %v", pair, err)
 		}
 	}
+}
+
+func connectToInflux(cfg config.InfluxDB, logger *log.Logger) {
+	fmt.Printf("%#v\n", cfg)
+
+	client := influxdb2.NewClient(cfg.URL, cfg.Token)
+	_ = client
 }
