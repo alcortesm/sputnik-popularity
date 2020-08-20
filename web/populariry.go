@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"sync"
 
 	"github.com/alcortesm/sputnik-popularity/pair"
 )
@@ -45,7 +46,10 @@ const noData = `<!DOCTYPE html>
 // representation of the newest ones. It has a miximum capcacity of
 // pairs: when adding new pairs, the surplus oldest ones will be
 // forgotten.
+//
+// The Add and HTML methods are thread-safe.
 type Popularity struct {
+	lock  *sync.Mutex
 	cache *Cache
 	page  []byte
 }
@@ -58,6 +62,7 @@ func NewPopularity(cap int) (*Popularity, error) {
 	}
 
 	p := &Popularity{
+		lock:  &sync.Mutex{},
 		cache: cache,
 	}
 
@@ -70,11 +75,16 @@ func NewPopularity(cap int) (*Popularity, error) {
 
 // HTML returns a web page with the newest pairs added.
 func (p *Popularity) HTML() []byte {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	return p.page
 }
 
 // Add adds the given pairs to the web page.
 func (p *Popularity) Add(pairs ...pair.Pair) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	p.cache.Add(pairs...)
 
 	if err := p.createPage(); err != nil {

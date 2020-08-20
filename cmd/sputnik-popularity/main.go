@@ -14,20 +14,12 @@ func main() {
 	logger := log.New(os.Stdout, "",
 		log.Ldate|log.Ltime|log.LUTC)
 
-	capacity := 2
+	capacity := 5
 
 	popularity, err := web.NewPopularity(capacity)
 	if err != nil {
 		logger.Fatalf("creating popularity: %v", err)
 	}
-
-	initialPairs := []pair.Pair{
-		{Timestamp: time.Time{}.Add(time.Second), Value: 1.0},
-		{Timestamp: time.Time{}.Add(2 * time.Second), Value: 2.0},
-		{Timestamp: time.Time{}.Add(3 * time.Second), Value: 3.0},
-	}
-
-	popularity.Add(initialPairs...)
 
 	http.Handle("/popularity.html", web.Decorate(
 		http.HandlerFunc(
@@ -55,5 +47,23 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
+	go addDemoValues(popularity, logger)
+
 	log.Fatal(s.ListenAndServe())
+}
+
+func addDemoValues(p *web.Popularity, logger *log.Logger) {
+	var value float64 = 0.0
+
+	for {
+		time.Sleep(time.Second)
+		value++
+		pair := pair.Pair{
+			Timestamp: time.Now(),
+			Value:     value,
+		}
+		if err := p.Add(pair); err != nil {
+			logger.Fatalf("adding pair %v: %v", pair, err)
+		}
+	}
 }
