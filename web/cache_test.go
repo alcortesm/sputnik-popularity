@@ -1,15 +1,17 @@
-package pair_test
+package web_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/alcortesm/sputnik-popularity/pair"
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/alcortesm/sputnik-popularity/pair"
+	"github.com/alcortesm/sputnik-popularity/web"
 )
 
-func TestHistoryError(t *testing.T) {
+func TestCacheError(t *testing.T) {
 	t.Parallel()
 
 	caps := []int{0, -1, -10}
@@ -20,7 +22,7 @@ func TestHistoryError(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			h, err := pair.NewHistory(cap)
+			h, err := web.NewCache(cap)
 			if err == nil {
 				t.Errorf("unexpected success, got %#v", h)
 			}
@@ -28,7 +30,7 @@ func TestHistoryError(t *testing.T) {
 	}
 }
 
-func TestHistoryOK(t *testing.T) {
+func TestCacheOK(t *testing.T) {
 	t.Parallel()
 
 	p1 := pair.Pair{
@@ -39,6 +41,11 @@ func TestHistoryOK(t *testing.T) {
 	p2 := pair.Pair{
 		Timestamp: p1.Timestamp.Add(time.Second),
 		Value:     2,
+	}
+
+	p3 := pair.Pair{
+		Timestamp: p2.Timestamp.Add(time.Second),
+		Value:     3,
 	}
 
 	subtests := []struct {
@@ -63,25 +70,25 @@ func TestHistoryOK(t *testing.T) {
 			name:  "add 2 Pairs in chronological order",
 			cap:   10,
 			pairs: []pair.Pair{p1, p2},
-			want:  []pair.Pair{p2, p1},
+			want:  []pair.Pair{p1, p2},
 		},
 		{
 			name:  "add 2 Pairs in non-chronological order",
 			cap:   10,
 			pairs: []pair.Pair{p2, p1},
-			want:  []pair.Pair{p2, p1},
+			want:  []pair.Pair{p1, p2},
 		},
 		{
 			name:  "add chronologically, cap reached",
-			cap:   1,
-			pairs: []pair.Pair{p1, p2},
-			want:  []pair.Pair{p2},
+			cap:   2,
+			pairs: []pair.Pair{p1, p2, p3},
+			want:  []pair.Pair{p2, p3},
 		},
 		{
 			name:  "add non-chronologically, cap reached",
-			cap:   1,
-			pairs: []pair.Pair{p2, p1},
-			want:  []pair.Pair{p2},
+			cap:   2,
+			pairs: []pair.Pair{p2, p1, p3},
+			want:  []pair.Pair{p2, p3},
 		},
 	}
 
@@ -90,7 +97,7 @@ func TestHistoryOK(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			h, err := pair.NewHistory(test.cap)
+			h, err := web.NewCache(test.cap)
 			if err != nil {
 				t.Fatal(err)
 			}

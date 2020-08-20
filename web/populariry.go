@@ -1,65 +1,104 @@
 package web
 
 import (
-	"net/http"
+	"bytes"
+	"fmt"
+	"html/template"
 
 	"github.com/alcortesm/sputnik-popularity/pair"
 )
 
+var tmpl = template.Must(template.New("popularity table").
+	Parse(`<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Hello World</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+	<h1>Sputnik Popularity</h1>
+	{{range .}}
+	<p>{{.}}</p>
+	{{end}}
+
+</body>
+</html>`))
+
+const noData = `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Hello World</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+	<h1>Sputnik Popularity</h1>
+	<p>There are no data available.</p>
+
+</body>
+</html>`
+
+// Popularity keeps track of pairs and allow to generate an HTML
+// representation of the newest ones. It has a miximum capcacity of
+// pairs: when adding new pairs, the surplus oldest ones will be
+// forgotten.
 type Popularity struct {
-	cache Cache
+	cache *Cache
 	page  []byte
 }
 
-// Cache is a collection of pairs.
-type Cache interface {
-	// Add adds some pairs to the collection.
-	Add(...pair.Pair)
-	// Get returns the pairs in chronological order.
-	Get() []pair.Pair
-}
-
-func NewPopularity(c Cache) *Popularity {
-	return &Popularity{
-		cache: c,
-		page: []byte(`<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="utf-8">
-	<title>Hello World</title>
-	<link rel="stylesheet" href="/style.css">
-</head>
-<body>
-
-	<h1>Hello world!</h1>
-	<p>No data yet.</p>
-
-</body>
-</html>`),
+// NewPopularity returns a new Popularity with the given capacity.
+func NewPopularity(cap int) (*Popularity, error) {
+	cache, err := NewCache(cap)
+	if err != nil {
+		return nil, err
 	}
+
+	p := &Popularity{
+		cache: cache,
+	}
+
+	if err := p.createPage(); err != nil {
+		return nil, fmt.Errorf("cannot create page: %v", err)
+	}
+
+	return p, nil
 }
 
-func (p Popularity) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-type", "text/html")
-		w.Write(p.page)
-	})
+// HTML returns a web page with the newest pairs added.
+func (p *Popularity) HTML() []byte {
+	return p.page
 }
 
-func (p Popularity) Add(pairs ...pair.Pair) {
+// Add adds the given pairs to the web page.
+func (p *Popularity) Add(pairs ...pair.Pair) error {
 	p.cache.Add(pairs...)
-	p.page = []byte(`<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="utf-8">
-	<title>Hello World</title>
-	<link rel="stylesheet" href="/style.css">
-</head>
-<body>
 
-	<h1>Hello world!</h1>
-	<p>Foo.</p>
+	if err := p.createPage(); err != nil {
+		return fmt.Errorf("creating new page: %v", err)
+	}
 
-</body>
-</html>`)
+	return nil
+}
+
+func (p *Popularity) createPage() error {
+	pairs := p.cache.Get()
+
+	if len(pairs) == 0 {
+		p.page = []byte(noData)
+		return nil
+	}
+
+	b := &bytes.Buffer{}
+
+	if err := tmpl.Execute(b, pairs); err != nil {
+		return err
+	}
+
+	p.page = b.Bytes()
+
+	return nil
 }
