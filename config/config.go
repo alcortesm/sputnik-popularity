@@ -5,8 +5,9 @@ type Config struct {
 }
 
 type InfluxDB struct {
-	URL    string `required:"true"`
-	Token  string `required:"true"`
-	Org    string `required:"true"`
-	Bucket string `required:"true"`
+	URL        string `required:"true"`
+	TokenWrite string `required:"true" split_words:"true"`
+	TokenRead  string `required:"true" split_words:"true"`
+	Org        string `required:"true"`
+	Bucket     string `required:"true"`
 }
