@@ -1,13 +1,7 @@
 package config
 
-type Config struct {
-	InfluxDB InfluxDB
-}
+import "github.com/alcortesm/sputnik-popularity/influx"
 
-type InfluxDB struct {
-	URL        string `required:"true"`
-	TokenWrite string `required:"true" split_words:"true"`
-	TokenRead  string `required:"true" split_words:"true"`
-	Org        string `required:"true"`
-	Bucket     string `required:"true"`
+type Config struct {
+	InfluxDB influx.Config
 }

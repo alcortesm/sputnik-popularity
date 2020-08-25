@@ -7,11 +7,10 @@ import (
 	"os"
 	"time"
 
-	influx "github.com/influxdata/influxdb-client-go/v2"
-	influxlog "github.com/influxdata/influxdb-client-go/v2/log"
 	"github.com/kelseyhightower/envconfig"
 
 	"github.com/alcortesm/sputnik-popularity/config"
+	"github.com/alcortesm/sputnik-popularity/influx"
 	"github.com/alcortesm/sputnik-popularity/pair"
 	"github.com/alcortesm/sputnik-popularity/web"
 )
@@ -87,83 +86,35 @@ func addDemoValues(p *web.Popularity, logger *log.Logger) {
 	}
 }
 
-func testInflux(cfg config.InfluxDB, logger *log.Logger) error {
-	// disable influxdb client logs
-	influxlog.Log = nil
-
+func testInflux(config influx.Config, logger *log.Logger) error {
 	const (
 		measurement = "capacity_utilization"
 		field       = "percent"
 	)
 
-	if err := testWrite(cfg, measurement, field); err != nil {
-		return fmt.Errorf("testing write: %v", err)
-	}
-
-	if err := testRead(cfg, measurement, field); err != nil {
-		return fmt.Errorf("testing read: %v", err)
-	}
-
-	return nil
-}
-
-func testWrite(cfg config.InfluxDB, measurement, field string) error {
-	client := influx.NewClient(cfg.URL, cfg.TokenWrite)
-	defer client.Close()
-
-	writeAPI := client.WriteAPIBlocking(cfg.Org, cfg.Bucket)
-
-	p := influx.NewPoint(measurement,
-		nil,
-		map[string]interface{}{field: 45},
-		time.Now(),
-	)
-
-	if err := writeAPI.WritePoint(context.Background(), p); err != nil {
-		return fmt.Errorf("writing point: %v", err)
-	}
-
-	return nil
-}
-
-func testRead(cfg config.InfluxDB, measurement, field string) error {
-	client := influx.NewClient(cfg.URL, cfg.TokenRead)
-	defer client.Close()
-
-	queryAPI := client.QueryAPI(cfg.Org)
-
-	const start = "-30d"
-
-	query := fmt.Sprintf(`from(bucket:%q)
-			|> range(start: %s)
-			|> filter( fn: (r) =>
-				(r._measurement == %q) and
-				(r._field == %q)
-			)`,
-		cfg.Bucket,
-		start,
+	store, cancel := influx.NewStore(
+		config,
 		measurement,
 		field,
 	)
+	defer cancel()
 
-	result, err := queryAPI.Query(context.Background(), query)
+	p := pair.Pair{
+		Value:     42.0,
+		Timestamp: time.Now(),
+	}
+
+	if err := store.Add(context.Background(), p); err != nil {
+		return fmt.Errorf("writing to influx: %v", err)
+	}
+
+	month := 30 * 24 * time.Hour
+	got, err := store.Get(context.Background(), month)
 	if err != nil {
-		return fmt.Errorf("creating query: %v", err)
+		return fmt.Errorf("reading from influx: %v", err)
 	}
 
-	for result.Next() {
-		r := result.Record()
-		v := r.Value()
-		asFloat, ok := v.(int64)
-		if !ok {
-			return fmt.Errorf("value (%#v, %[1]T) is not a float64", v)
-		}
-
-		fmt.Printf("%s %d\n", r.Time().UTC().Format(time.RFC3339), asFloat)
-	}
-	if result.Err() != nil {
-		return fmt.Errorf("query error: %s\n", result.Err().Error())
-	}
+	fmt.Println(got)
 
 	return nil
 }
