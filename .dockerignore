@@ -1,0 +1,11 @@
+**.swp
+
+.circleci
+.dockerignore
+.git
+
+Dockerfile
+LICENSE
+makefile
+README.md
+tests

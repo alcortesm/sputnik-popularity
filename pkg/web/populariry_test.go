@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alcortesm/sputnik-popularity/pair"
-	"github.com/alcortesm/sputnik-popularity/web"
+	"github.com/alcortesm/sputnik-popularity/pkg/pair"
+	"github.com/alcortesm/sputnik-popularity/pkg/web"
 )
 
 func TestPopularity(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/alcortesm/sputnik-popularity/pair"
-	"github.com/alcortesm/sputnik-popularity/web"
+	"github.com/alcortesm/sputnik-popularity/pkg/pair"
+	"github.com/alcortesm/sputnik-popularity/pkg/web"
 )
 
 func TestCacheError(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"github.com/influxdata/influxdb-client-go/v2/log"
 
-	"github.com/alcortesm/sputnik-popularity/pair"
+	"github.com/alcortesm/sputnik-popularity/pkg/pair"
 )
 
 func init() {
@@ -75,7 +75,7 @@ func (s *Store) Add(ctx context.Context, pairs ...pair.Pair) error {
 	}
 
 	if err := s.writeAPI.WritePoint(ctx, points...); err != nil {
-		return fmt.Errorf("writing points (%v): %v", points, err)
+		return fmt.Errorf("writing points: %v", err)
 	}
 
 	return nil
@@ -83,16 +83,16 @@ func (s *Store) Add(ctx context.Context, pairs ...pair.Pair) error {
 
 func (s *Store) Get(
 	ctx context.Context,
-	since time.Duration,
+	since time.Time,
 ) ([]pair.Pair, error) {
 	query := fmt.Sprintf(`from(bucket:%q)
-			|> range(start: "-%s")
+			|> range(start: %s)
 			|> filter( fn: (r) =>
 				(r._measurement == %q) and
 				(r._field == %q)
 			)`,
 		s.config.Bucket,
-		since,
+		since.UTC().Format(time.RFC3339),
 		s.measurement,
 		s.field,
 	)
