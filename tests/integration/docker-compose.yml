@@ -1,0 +1,13 @@
+version: "3.6"
+services:
+
+  influxdb:
+    image: quay.io/influxdb/influxdb:2.0.0-beta
+
+  tester:
+    build:
+      context: ../..
+      target: src
+    entrypoint: ["go", "test", "./pkg/influx", "-tags", "integration", "-cover", "-race"]
+    depends_on:
+      - influxdb

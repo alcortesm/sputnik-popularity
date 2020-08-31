@@ -5,16 +5,10 @@ jobs:
     docker:
       - image: circleci/golang:1.15
 
-    environment:
-      TEST_RESULTS: /tmp/test-results
-
     steps:
       - checkout
 
-      - run:
-          name: Create directory to store tests results
-          command: |
-            mkdir -p $TEST_RESULTS
+      - setup_remote_docker
 
       - restore_cache: # restores saved cache if no changes are detected since last run
           keys:
@@ -23,7 +17,12 @@ jobs:
       - run:
           name: Run unit tests
           command: |
-            gotestsum --format standard-quiet --junitfile ${TEST_RESULTS}/gotestsum-report.xml -- -cover -race ./...
+            make unit
+
+      - run:
+          name: Run integration tests
+          command: |
+            make integration
 
       - run:
           name: Build the project
@@ -34,13 +33,6 @@ jobs:
           key: go-mod-{{ checksum "go.sum" }}
           paths:
             - "/go/pkg/mod"
-
-      - store_artifacts:
-          path: /tmp/test-results
-          destination: raw-test-output
-
-      - store_test_results:
-          path: /tmp/test-results
 
 workflows:
   version: 2

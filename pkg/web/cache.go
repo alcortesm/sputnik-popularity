@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/alcortesm/sputnik-popularity/pair"
+	"github.com/alcortesm/sputnik-popularity/pkg/pair"
 )
 
 // Cache is a collection of Pairs with a fixed capacity.
