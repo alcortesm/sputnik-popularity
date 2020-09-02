@@ -3,7 +3,7 @@ ARG src=/tmp/${project}
 
 ####
 # Creates a Docker image with the sources.
-FROM golang:1.15.0-buster AS src
+FROM golang:1.15.1-buster AS src
 ARG src
 
 COPY . ${src}
