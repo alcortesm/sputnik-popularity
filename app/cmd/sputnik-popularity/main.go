@@ -11,10 +11,10 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 
-	"github.com/alcortesm/sputnik-popularity/pkg/influx"
-	"github.com/alcortesm/sputnik-popularity/pkg/pair"
-	"github.com/alcortesm/sputnik-popularity/pkg/scrape"
-	"github.com/alcortesm/sputnik-popularity/pkg/web"
+	"github.com/alcortesm/sputnik-popularity/app/influx"
+	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/scrape"
+	"github.com/alcortesm/sputnik-popularity/app/web"
 )
 
 type Config struct {

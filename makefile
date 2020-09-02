@@ -10,7 +10,7 @@ test: unit integration
 
 .PHONY: unit
 unit:
-	go test ./... -cover -race
+	cd app && go test ./... -cover -race
 
 .PHONY: clean
 clean: integration_clean

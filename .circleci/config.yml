@@ -12,7 +12,7 @@ jobs:
 
       - restore_cache: # restores saved cache if no changes are detected since last run
           keys:
-            - go-mod-{{ checksum "go.sum" }}
+            - go-mod-{{ checksum "app/go.sum" }}
 
       - run:
           name: Run unit tests
@@ -24,13 +24,8 @@ jobs:
           command: |
             make integration
 
-      - run:
-          name: Build the project
-          command: |
-            go build ./cmd/sputnik-popularity
-
       - save_cache:
-          key: go-mod-{{ checksum "go.sum" }}
+          key: go-mod-{{ checksum "app/go.sum" }}
           paths:
             - "/go/pkg/mod"
 

@@ -15,8 +15,8 @@ import (
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api/write"
 
-	"github.com/alcortesm/sputnik-popularity/pkg/influx"
-	"github.com/alcortesm/sputnik-popularity/pkg/pair"
+	"github.com/alcortesm/sputnik-popularity/app/influx"
+	"github.com/alcortesm/sputnik-popularity/app/pair"
 )
 
 const (
