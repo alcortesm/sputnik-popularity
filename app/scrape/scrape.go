@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alcortesm/sputnik-popularity/pkg/pair"
+	"github.com/alcortesm/sputnik-popularity/app/pair"
 )
 
 type Config struct {

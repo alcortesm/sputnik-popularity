@@ -15,8 +15,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/alcortesm/sputnik-popularity/pkg/pair"
-	"github.com/alcortesm/sputnik-popularity/pkg/scrape"
+	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/scrape"
 )
 
 func TestScrape(t *testing.T) {

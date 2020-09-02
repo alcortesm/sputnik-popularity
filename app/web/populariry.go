@@ -6,7 +6,7 @@ import (
 	"html/template"
 	"sync"
 
-	"github.com/alcortesm/sputnik-popularity/pkg/pair"
+	"github.com/alcortesm/sputnik-popularity/app/pair"
 )
 
 var tmpl = template.Must(template.New("popularity table").
