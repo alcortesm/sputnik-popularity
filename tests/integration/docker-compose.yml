@@ -6,8 +6,8 @@ services:
 
   tester:
     build:
-      context: ../../app
+      context: ../..
       target: src
-    entrypoint: ["go", "test", "./influx", "-tags", "integration", "-cover", "-race"]
+    entrypoint: ["go", "test", "-tags", "integration", "-cover", "-race", "./app/influx"]
     depends_on:
       - influxdb

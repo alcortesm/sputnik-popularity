@@ -1,0 +1,11 @@
+**.swp
+
+**/docker-compose.yml
+
+.circleci
+.dockerignore
+.git
+Dockerfile
+LICENSE
+makefile
+README.md

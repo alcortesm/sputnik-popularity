@@ -12,7 +12,7 @@ jobs:
 
       - restore_cache: # restores saved cache if no changes are detected since last run
           keys:
-            - go-mod-{{ checksum "app/go.sum" }}
+            - go-mod-{{ checksum "go.sum" }}
 
       - run:
           name: Run unit tests
@@ -24,8 +24,13 @@ jobs:
           command: |
             make integration
 
+      - run:
+          name: Run e2e tests
+          command: |
+            make e2e
+
       - save_cache:
-          key: go-mod-{{ checksum "app/go.sum" }}
+          key: go-mod-{{ checksum "go.sum" }}
           paths:
             - "/go/pkg/mod"
 

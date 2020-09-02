@@ -6,14 +6,14 @@ SHELL := bash
 .SUFFIXES:
 
 .PHONY: test
-test: unit integration
+test: unit integration e2e
 
 .PHONY: unit
 unit:
-	cd app && go test ./... -cover -race
+	go test ./... -cover -race
 
 .PHONY: clean
-clean: integration_clean
+clean: integration_clean e2e_clean
 
 .PHONY: integration
 integration: integration_test integration_clean
@@ -26,12 +26,48 @@ integration_test:
 	docker-compose $(dc-flags) up \
 		--force-recreate \
 		--remove-orphans \
-		--abort-on-container-exit \
-		--exit-code-from tester \
+		--detach
+	result=$$(docker wait $(project)_tester_1); \
+	if [ $${result} != 0 ]; then \
+		docker-compose $(dc-flags) stop; \
+		docker-compose $(dc-flags) logs; \
+		false; \
+	else \
+		docker-compose $(dc-flags) logs tester; \
+	fi
 
 .PHONY: integration_clean
 integration_clean: dir := tests/integration
 integration_clean: project := integration
 integration_clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
 integration_clean:
+	docker-compose $(dc-flags) rm -v --stop --force
+
+.PHONY: e2e
+e2e: e2e_test e2e_clean
+
+.PHONY: e2e_test
+e2e_test: dir := tests/e2e
+e2e_test: project := e2e
+e2e_test: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
+e2e_test:
+	docker-compose $(dc-flags) build
+	docker-compose $(dc-flags) up \
+		--force-recreate \
+		--remove-orphans \
+		--detach
+	result=$$(docker wait $(project)_tester_1); \
+	if [ $${result} != 0 ]; then \
+		docker-compose $(dc-flags) stop; \
+		docker-compose $(dc-flags) logs; \
+		false; \
+	else \
+		docker-compose $(dc-flags) logs tester; \
+	fi
+
+.PHONY: e2e_clean
+e2e_clean: dir := tests/e2e
+e2e_clean: project := e2e
+e2e_clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
+e2e_clean:
 	docker-compose $(dc-flags) rm -v --stop --force
