@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -23,11 +24,13 @@ type Config struct {
 }
 
 func main() {
-	ctx, cancel := signalContext(os.Interrupt, os.Kill)
+	ctx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	logger := log.New(os.Stdout, "",
 		log.Ldate|log.Ltime|log.LUTC)
+
+	logger.Println("starting app...")
 
 	var config Config
 	envPrefix := "SPUTNIK_POPULARITY"
@@ -38,6 +41,16 @@ func main() {
 
 	if err := testScraper(ctx, logger, config.Scrape); err != nil {
 		logger.Fatalf("testing scraper: %v", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Printf("exiting: %v\n", ctx.Err())
+			return
+		case <-time.After(10 * time.Second):
+			logger.Fatal("timeout waiting for signals")
+		}
 	}
 
 	/*
