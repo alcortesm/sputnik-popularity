@@ -14,15 +14,43 @@ var tmpl = template.Must(template.New("popularity table").
 <html lang="en">
 <head>
 	<meta charset="utf-8">
-	<title>Hello World</title>
+	<title>Sputnik Popularity</title>
 	<link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.8.0"></script>
 </head>
 <body>
 
 	<h1>Sputnik Popularity</h1>
-	{{range .}}
-	<p>{{.}}</p>
-	{{end}}
+
+	<div class="container">
+		<canvas id="chart"></canvas>
+	</div>
+
+    <script type="text/javascript">
+      var ctx = document.getElementById('chart').getContext('2d');
+
+      var chart = new Chart(ctx, {
+        type: 'line',
+
+        data: {
+          labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+          datasets: [{
+		    label: 'capacity utilization (%)',
+            backgroundColor: 'rgb(255, 99, 132)',
+            borderColor: 'rgb(255, 99, 132)',
+            data: [0, 10, 5, 2, 20, 30, 45]
+          }]
+        },
+
+        options: {}
+
+      });
+    </script>
+    <noscript>
+		{{range .}}
+		<p>{{.}}</p>
+		{{end}}
+    </noscript>
 
 </body>
 </html>`))

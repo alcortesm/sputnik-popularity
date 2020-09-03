@@ -16,6 +16,7 @@ import (
 	"github.com/alcortesm/sputnik-popularity/app/pair"
 	"github.com/alcortesm/sputnik-popularity/app/scrape"
 	"github.com/alcortesm/sputnik-popularity/app/web"
+	"github.com/alcortesm/sputnik-popularity/pkg/httpdeco"
 )
 
 type Config struct {
@@ -39,58 +40,71 @@ func main() {
 		logger.Fatalf("processign environment variables: %v", err)
 	}
 
-	if err := testScraper(ctx, logger, config.Scrape); err != nil {
-		logger.Fatalf("testing scraper: %v", err)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Printf("exiting: %v\n", ctx.Err())
-			return
-		case <-time.After(10 * time.Second):
-			logger.Fatal("timeout waiting for signals")
-		}
-	}
-
 	/*
-		capacity := 5
-
-		popularity, err := web.NewPopularity(capacity)
-		if err != nil {
-			logger.Fatalf("creating popularity: %v", err)
+		if err := testScraper(ctx, logger, config.Scrape); err != nil {
+			logger.Fatalf("testing scraper: %v", err)
 		}
-
-		http.Handle("/popularity.html", web.Decorate(
-			http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-type", "text/html")
-					w.Write(popularity.HTML())
-				},
-			),
-			web.WithLogs(logger),
-		))
-
-		http.Handle("/style.css", web.Decorate(
-			web.StyleHandler(),
-			web.WithLogs(logger),
-		))
-
-		http.Handle("/", web.Decorate(
-			http.NotFoundHandler(),
-			web.WithLogs(logger),
-		))
-
-		s := &http.Server{
-			Addr:         ":8080",
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 10 * time.Second,
-		}
-
-		go addDemoValues(popularity, logger)
-
-		logger.Fatal(s.ListenAndServe())
 	*/
+
+	capacity := 5
+
+	popularity, err := web.NewPopularity(capacity)
+	if err != nil {
+		logger.Fatalf("creating popularity: %v", err)
+	}
+
+	http.Handle("/popularity.html", httpdeco.Decorate(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-type", "text/html")
+				w.Write(popularity.HTML())
+			},
+		),
+		httpdeco.WithLogs(logger),
+	))
+
+	http.Handle("/style.css", httpdeco.Decorate(
+		web.StyleHandler(),
+		httpdeco.WithLogs(logger),
+	))
+
+	http.Handle("/", httpdeco.Decorate(
+		http.NotFoundHandler(),
+		httpdeco.WithLogs(logger),
+	))
+
+	port := "8080"
+
+	server := &http.Server{
+		Addr:         ":" + port,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	go addDemoValues(popularity, logger)
+
+	go func() {
+		logger.Printf("starting server at port %s...\n", port)
+
+		err := server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	<-ctx.Done()
+
+	log.Println("signal received: stopping server...")
+
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("shutting down server: %+v", err)
+	}
 }
 
 func signalContext(signals ...os.Signal) (
