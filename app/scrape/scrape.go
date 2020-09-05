@@ -5,29 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 )
 
 type Config struct {
-	URL     string `required:"true"`
-	GymName string `required:"true" split_words:"true"`
-	GymID   int    `required:"true" split_words:"true"`
+	URL     string        `required:"true"`
+	GymName string        `required:"true" split_words:"true"`
+	GymID   int           `required:"true" split_words:"true"`
+	Period  time.Duration `required:"true"`
+	Timeout time.Duration `required:"true"`
 }
 
 type Scraper struct {
-	logger Logger
+	logger *log.Logger
 	client HTTPer
 	clock  Clock
 	url    string
 	body   string
-}
-
-type Logger interface {
-	Printf(string, ...interface{})
 }
 
 type HTTPer interface {
@@ -37,7 +36,7 @@ type HTTPer interface {
 type Clock func() time.Time
 
 func NewScraper(
-	logger Logger,
+	logger *log.Logger,
 	client HTTPer,
 	clock Clock,
 	config Config,
@@ -55,7 +54,7 @@ func NewScraper(
 	}
 }
 
-func (s *Scraper) Scrape(ctx context.Context) (*pair.Pair, error) {
+func (s *Scraper) Scrape(ctx context.Context) (*gym.Utilization, error) {
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
@@ -90,22 +89,67 @@ func (s *Scraper) Scrape(ctx context.Context) (*pair.Pair, error) {
 	}
 
 	var response struct {
-		People   float64
-		Capacity float64
+		People   uint64
+		Capacity uint64
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("decoding response: %v", err)
 	}
 
-	if response.Capacity == 0.0 {
-		return nil, fmt.Errorf("server returned zero capacity")
+	if response.Capacity == 0 {
+		return nil, fmt.Errorf("ignoring server response with zero capacity")
 	}
 
-	result := &pair.Pair{
+	result := &gym.Utilization{
 		Timestamp: s.clock(),
-		Value:     response.People / response.Capacity,
+		People:    response.People,
+		Capacity:  response.Capacity,
 	}
 
 	return result, nil
+}
+
+func Run(
+	ctx context.Context,
+	logger *log.Logger,
+	config Config,
+	trigger <-chan time.Time,
+	scraped chan<- *gym.Utilization,
+) error {
+	logger.Println("start scraping...")
+	defer logger.Println("stopped scraping")
+
+	client := &http.Client{Timeout: config.Timeout * time.Second}
+
+	scraper := NewScraper(
+		logger,
+		client,
+		time.Now,
+		config,
+	)
+
+	for {
+		u, err := scraper.Scrape(ctx)
+		if err != nil {
+			return fmt.Errorf("scraping: %v", err)
+		}
+
+		logger.Printf("debug: scraped %v\n", u)
+
+		scraped <- u
+
+		// wait for a trigger or a cancelation of the context
+		select {
+		case _, ok := <-trigger:
+			if !ok {
+				return fmt.Errorf("closed trigger channel")
+			}
+			continue
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return nil
 }

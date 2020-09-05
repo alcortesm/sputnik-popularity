@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 	"github.com/alcortesm/sputnik-popularity/app/web"
 )
 
@@ -33,62 +33,69 @@ func TestCacheError(t *testing.T) {
 func TestCacheOK(t *testing.T) {
 	t.Parallel()
 
-	p1 := pair.Pair{
-		Timestamp: time.Time{}.Add(time.Second),
-		Value:     1,
+	t1 := time.Time{}.Add(1 * time.Second)
+	t2 := time.Time{}.Add(2 * time.Second)
+	t3 := time.Time{}.Add(3 * time.Second)
+
+	u1 := &gym.Utilization{
+		Timestamp: t1,
+		People:    1,
+		Capacity:  42,
 	}
 
-	p2 := pair.Pair{
-		Timestamp: p1.Timestamp.Add(time.Second),
-		Value:     2,
+	u2 := &gym.Utilization{
+		Timestamp: t2,
+		People:    2,
+		Capacity:  42,
 	}
 
-	p3 := pair.Pair{
-		Timestamp: p2.Timestamp.Add(time.Second),
-		Value:     3,
+	u3 := &gym.Utilization{
+		Timestamp: t3,
+		People:    3,
+		Capacity:  42,
 	}
 
 	subtests := []struct {
 		name  string
 		cap   int
-		pairs []pair.Pair
-		want  []pair.Pair
+		toAdd []*gym.Utilization
+		toGet []*gym.Utilization
 	}{
 		{
 			name:  "empty",
 			cap:   10,
-			pairs: []pair.Pair{},
-			want:  []pair.Pair{},
+			toAdd: []*gym.Utilization{},
+			toGet: []*gym.Utilization{},
 		},
 		{
-			name:  "add 1 Pair",
+			name:  "add 1 utilization sample",
 			cap:   10,
-			pairs: []pair.Pair{p1},
-			want:  []pair.Pair{p1},
+			toAdd: []*gym.Utilization{u1},
+			toGet: []*gym.Utilization{u1},
 		},
 		{
-			name:  "add 2 Pairs in chronological order",
+			name:  "add 2 samples in chronological order",
 			cap:   10,
-			pairs: []pair.Pair{p1, p2},
-			want:  []pair.Pair{p1, p2},
+			toAdd: []*gym.Utilization{u1, u2},
+			toGet: []*gym.Utilization{u1, u2},
 		},
 		{
-			name:  "add 2 Pairs in non-chronological order",
+			name:  "add 2 samples in non-chronological order",
 			cap:   10,
-			pairs: []pair.Pair{p2, p1},
-			want:  []pair.Pair{p1, p2},
+			toAdd: []*gym.Utilization{u2, u1},
+			toGet: []*gym.Utilization{u1, u2},
 		},
 		{
 			name:  "add chronologically, cap reached",
 			cap:   2,
-			pairs: []pair.Pair{p1, p2, p3},
-			want:  []pair.Pair{p2, p3},
+			toAdd: []*gym.Utilization{u1, u2, u3},
+			toGet: []*gym.Utilization{u2, u3},
 		},
 		{
 			name:  "add non-chronologically, cap reached",
 			cap:   2,
-			pairs: []pair.Pair{p2, p1, p3},
-			want:  []pair.Pair{p2, p3},
+			toAdd: []*gym.Utilization{u2, u1, u3},
+			toGet: []*gym.Utilization{u2, u3},
 		},
 	}
 
@@ -97,18 +104,16 @@ func TestCacheOK(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			h, err := web.NewCache(test.cap)
+			cache, err := web.NewCache(test.cap)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			for _, p := range test.pairs {
-				h.Add(p)
-			}
+			cache.Add(test.toAdd...)
 
-			got := h.Get()
+			got := cache.Get()
 
-			if diff := cmp.Diff(test.want, got); diff != "" {
+			if diff := cmp.Diff(test.toGet, got); diff != "" {
 				t.Errorf("(-want +got)\n%s", diff)
 			}
 		})

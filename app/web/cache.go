@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 )
 
-// Cache is a collection of Pairs with a fixed capacity.
+// Cache is a collection of gym.Utilization data with a fixed capacity.
 type Cache struct {
 	cap  int
-	data []pair.Pair
+	data []*gym.Utilization
 }
 
 // Returns a new Cache with the given capacity.
@@ -21,15 +21,15 @@ func NewCache(cap int) (*Cache, error) {
 
 	return &Cache{
 		cap:  cap,
-		data: []pair.Pair{},
+		data: []*gym.Utilization{},
 	}, nil
 }
 
-// Add adds some pairs to the cache. If the number of pairs in the
-// cache exceeds its capacity, the oldest surplus pairs will be
+// Add adds some data to the cache. If the number of items in the
+// cache exceeds its capacity, the oldest surplus items will be
 // deleted.
-func (c *Cache) Add(pairs ...pair.Pair) {
-	c.data = append(c.data, pairs...)
+func (c *Cache) Add(data ...*gym.Utilization) {
+	c.data = append(c.data, data...)
 	sort.Slice(c.data, func(i, j int) bool {
 		return c.data[i].Timestamp.Before(c.data[j].Timestamp)
 	})
@@ -39,8 +39,8 @@ func (c *Cache) Add(pairs ...pair.Pair) {
 	}
 }
 
-// Get returns all the pairs in the cache, in reverse chronological
+// Get returns all the data in the cache, in reverse chronological
 // order.
-func (c *Cache) Get() []pair.Pair {
+func (c *Cache) Get() []*gym.Utilization {
 	return c.data
 }

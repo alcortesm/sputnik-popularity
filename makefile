@@ -32,9 +32,8 @@ integration_test:
 		docker-compose $(dc-flags) stop; \
 		docker-compose $(dc-flags) logs; \
 		false; \
-	else \
-		docker-compose $(dc-flags) logs tester; \
 	fi
+	docker-compose $(dc-flags) logs tester
 
 .PHONY: integration_clean
 integration_clean: dir := tests/integration
@@ -61,9 +60,8 @@ e2e_test:
 		docker-compose $(dc-flags) stop; \
 		docker-compose $(dc-flags) logs; \
 		false; \
-	else \
-		docker-compose $(dc-flags) logs tester; \
 	fi
+	docker-compose $(dc-flags) logs tester
 
 .PHONY: e2e_clean
 e2e_clean: dir := tests/e2e
