@@ -22,8 +22,8 @@ type Config struct {
 	URL        string `required:"true"`
 	TokenWrite string `required:"true" split_words:"true"`
 	TokenRead  string `required:"true" split_words:"true"`
-	Org        string `required:"true"`
-	Bucket     string `required:"true"`
+	Org        string `default:"tsDemo"`
+	Bucket     string `default:"sputnik_popularity"`
 }
 
 const (

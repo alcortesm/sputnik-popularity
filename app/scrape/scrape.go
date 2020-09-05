@@ -15,10 +15,10 @@ import (
 
 type Config struct {
 	URL     string        `required:"true"`
-	GymName string        `required:"true" split_words:"true"`
-	GymID   int           `required:"true" split_words:"true"`
-	Period  time.Duration `required:"true"`
-	Timeout time.Duration `required:"true"`
+	GymName string        `default:"sputnik" split_words:"true"`
+	GymID   int           `default:"121" split_words:"true"`
+	Period  time.Duration `default:"10m"`
+	Timeout time.Duration `default:"10s"`
 }
 
 type Scraper struct {
@@ -134,8 +134,6 @@ func Run(
 		if err != nil {
 			return fmt.Errorf("scraping: %v", err)
 		}
-
-		logger.Printf("debug: scraped %v\n", u)
 
 		scraped <- u
 

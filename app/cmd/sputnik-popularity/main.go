@@ -127,8 +127,6 @@ func processScrapedData(
 			if err := store.Add(ctx, u); err != nil {
 				logger.Printf("adding to store: %v\n", err)
 			}
-
-			logger.Printf("debug: %v was stored in InfluxDB", u)
 		}
 	}
 }
