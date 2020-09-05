@@ -6,7 +6,7 @@ import (
 	"html/template"
 	"sync"
 
-	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 )
 
 var tmpl = template.Must(template.New("popularity table").
@@ -70,10 +70,10 @@ const noData = `<!DOCTYPE html>
 </body>
 </html>`
 
-// Popularity keeps track of pairs and allow to generate an HTML
-// representation of the newest ones. It has a miximum capcacity of
-// pairs: when adding new pairs, the surplus oldest ones will be
-// forgotten.
+// Popularity keeps track of gym utilization and allow to generate an
+// HTML representation of the latest values. It has a miximum capcacity
+// of data: when adding new utilization data, the surplus oldest ones
+// will be forgotten.
 //
 // The Add and HTML methods are thread-safe.
 type Popularity struct {
@@ -101,19 +101,19 @@ func NewPopularity(cap int) (*Popularity, error) {
 	return p, nil
 }
 
-// HTML returns a web page with the newest pairs added.
+// HTML returns a web page with the latests utilization data.
 func (p *Popularity) HTML() []byte {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	return p.page
 }
 
-// Add adds the given pairs to the web page.
-func (p *Popularity) Add(pairs ...pair.Pair) error {
+// Add adds the given utilization data to the web page.
+func (p *Popularity) Add(data ...*gym.Utilization) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	p.cache.Add(pairs...)
+	p.cache.Add(data...)
 
 	if err := p.createPage(); err != nil {
 		return fmt.Errorf("creating new page: %v", err)
@@ -123,16 +123,16 @@ func (p *Popularity) Add(pairs ...pair.Pair) error {
 }
 
 func (p *Popularity) createPage() error {
-	pairs := p.cache.Get()
+	data := p.cache.Get()
 
-	if len(pairs) == 0 {
+	if len(data) == 0 {
 		p.page = []byte(noData)
 		return nil
 	}
 
 	b := &bytes.Buffer{}
 
-	if err := tmpl.Execute(b, pairs); err != nil {
+	if err := tmpl.Execute(b, data); err != nil {
 		return err
 	}
 

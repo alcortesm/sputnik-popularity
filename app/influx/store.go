@@ -7,10 +7,11 @@ import (
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/influxdata/influxdb-client-go/v2/api/query"
 	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"github.com/influxdata/influxdb-client-go/v2/log"
 
-	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 )
 
 func init() {
@@ -25,9 +26,13 @@ type Config struct {
 	Bucket     string `required:"true"`
 }
 
+const (
+	peopleFieldKey   = "people"
+	capacityFieldKey = "capacity"
+)
+
 type Store struct {
 	measurement string
-	field       string
 	config      Config
 	bucket      string
 	writeAPI    api.WriteAPIBlocking
@@ -37,14 +42,24 @@ type Store struct {
 func NewStore(
 	config Config,
 	measurement string,
-	field string,
 ) (store *Store, cancel func()) {
-	wc := influxdb2.NewClient(config.URL, config.TokenWrite)
-	rc := influxdb2.NewClient(config.URL, config.TokenRead)
+	opts := influxdb2.DefaultOptions().
+		SetPrecision(time.Second)
+
+	wc := influxdb2.NewClientWithOptions(
+		config.URL,
+		config.TokenWrite,
+		opts,
+	)
+
+	rc := influxdb2.NewClientWithOptions(
+		config.URL,
+		config.TokenRead,
+		opts,
+	)
 
 	store = &Store{
 		measurement: measurement,
-		field:       field,
 		config:      config,
 		writeAPI:    wc.WriteAPIBlocking(config.Org, config.Bucket),
 		queryAPI:    rc.QueryAPI(config.Org),
@@ -58,18 +73,22 @@ func NewStore(
 	return store, cancel
 }
 
-func (s *Store) Add(ctx context.Context, pairs ...pair.Pair) error {
-	points := make([]*write.Point, len(pairs))
+func (s *Store) Add(ctx context.Context, data ...*gym.Utilization) error {
+	points := make([]*write.Point, len(data))
 	{
-		tags := map[string]string(nil)
+		for i, d := range data {
+			noTags := map[string]string(nil)
 
-		for i, p := range pairs {
-			fields := map[string]interface{}{s.field: p.Value}
+			fields := map[string]interface{}{
+				peopleFieldKey:   d.People,
+				capacityFieldKey: d.Capacity,
+			}
+
 			points[i] = influxdb2.NewPoint(
 				s.measurement,
-				tags,
+				noTags,
 				fields,
-				p.Timestamp.UTC(),
+				d.Timestamp,
 			)
 		}
 	}
@@ -84,17 +103,26 @@ func (s *Store) Add(ctx context.Context, pairs ...pair.Pair) error {
 func (s *Store) Get(
 	ctx context.Context,
 	since time.Time,
-) ([]pair.Pair, error) {
+) ([]*gym.Utilization, error) {
 	query := fmt.Sprintf(`from(bucket:%q)
 			|> range(start: %s)
 			|> filter( fn: (r) =>
 				(r._measurement == %q) and
-				(r._field == %q)
+				(
+					(r._field == %q) or
+					(r._field == %q)
+				)
+			)
+			|> pivot(
+				rowKey:["_time"],
+				columnKey:["_field"],
+				valueColumn: "_value"
 			)`,
 		s.config.Bucket,
-		since.UTC().Format(time.RFC3339),
+		since.Format(time.RFC3339),
 		s.measurement,
-		s.field,
+		peopleFieldKey,
+		capacityFieldKey,
 	)
 
 	table, err := s.queryAPI.Query(ctx, query)
@@ -102,28 +130,61 @@ func (s *Store) Get(
 		return nil, fmt.Errorf("query error: %v", err)
 	}
 
-	result := []pair.Pair{}
+	result := []*gym.Utilization{}
 
 	for table.Next() {
-		r := table.Record()
-		t := r.Time().UTC()
-		v := r.Value()
-
-		asFloat, ok := v.(float64)
-		if !ok {
-			return nil, fmt.Errorf(
-				"value (%#v, %[1]T) at time %s is not a float64",
-				v, t.Format(time.RFC3339))
+		u, err := recordToUtilization(table.Record())
+		if err != nil {
+			return nil, fmt.Errorf("invalid influx record: %v", err)
 		}
 
-		result = append(result, pair.Pair{
-			Value:     asFloat,
-			Timestamp: t,
-		})
+		result = append(result, u)
 	}
 
 	if err := table.Err(); err != nil {
 		return nil, fmt.Errorf("table error: %s", err)
+	}
+
+	return result, nil
+}
+
+func recordToUtilization(r *query.FluxRecord) (*gym.Utilization, error) {
+	result := &gym.Utilization{
+		Timestamp: r.Time(),
+	}
+
+	raw := r.ValueByKey(peopleFieldKey)
+	var err error
+
+	result.People, err = toUint64(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s field value at %s: %v",
+			peopleFieldKey,
+			result.Timestamp.Format(time.RFC3339), err)
+	}
+
+	raw = r.ValueByKey(capacityFieldKey)
+
+	result.Capacity, err = toUint64(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s field value at %s: %v",
+			capacityFieldKey,
+			result.Timestamp.Format(time.RFC3339), err)
+	}
+
+	if result.Capacity == 0 {
+		return nil, fmt.Errorf("capacity at %s is 0",
+			result.Timestamp.Format(time.RFC3339),
+		)
+	}
+
+	return result, nil
+}
+
+func toUint64(v interface{}) (uint64, error) {
+	result, ok := v.(uint64)
+	if !ok {
+		return 0, fmt.Errorf("want uint64, got %T instead", v)
 	}
 
 	return result, nil

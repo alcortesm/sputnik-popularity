@@ -70,7 +70,7 @@ func main() {
 
 	<-done
 
-	log.Println("signal received: stopping server...")
+	logger.Println("signal received: stopping server...")
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),

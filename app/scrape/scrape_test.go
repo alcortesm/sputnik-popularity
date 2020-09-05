@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/alcortesm/sputnik-popularity/app/pair"
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 	"github.com/alcortesm/sputnik-popularity/app/scrape"
 )
 
@@ -23,10 +23,10 @@ func TestScrape(t *testing.T) {
 	t.Parallel()
 
 	subtests := map[string]func(t *testing.T){
-		"returns correct pair if response is valid": correct,
-		"handles errors from the HTTPer":            httperError,
-		"handles non-OK responses from the httper":  httperNonOKResponse,
-		"sends correct request":                     requestOK,
+		"returns correct utilization if response is valid": correct,
+		"handles errors from the HTTPer":                   httperError,
+		"handles non-OK responses from the httper":         httperNonOKResponse,
+		"sends correct request":                            requestOK,
 	}
 
 	for name, testFunc := range subtests {
@@ -41,7 +41,7 @@ func TestScrape(t *testing.T) {
 }
 
 // logger returns a scrape.Logger that writes to Go's testing output.
-func logger(t *testing.T) scrape.Logger {
+func logger(t *testing.T) *log.Logger {
 	return log.New(testWriter{t}, "", 0)
 }
 
@@ -65,19 +65,19 @@ func (m mockHTTPer) Do(r *http.Request) (*http.Response, error) {
 
 func correct(t *testing.T) {
 	fix := struct {
-		people    float64
-		capacity  float64
+		people    uint64
+		capacity  uint64
 		timestamp time.Time
 	}{
-		people:    42.0,
-		capacity:  200.0,
+		people:    42,
+		capacity:  200,
 		timestamp: time.Time{}.Add(time.Second),
 	}
 
 	// an httper that returns a valid response with the data we want.
 	var httper scrape.HTTPer
 	{
-		data := fmt.Sprintf(`{"People": %.0f, "Capacity": %.0f}`,
+		data := fmt.Sprintf(`{"People": %d, "Capacity": %d}`,
 			fix.people, fix.capacity)
 
 		response := &http.Response{
@@ -109,13 +109,13 @@ func correct(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := &pair.Pair{
+	want := &gym.Utilization{
 		Timestamp: fix.timestamp,
-		Value:     fix.people / fix.capacity,
+		People:    fix.people,
+		Capacity:  fix.capacity,
 	}
 
-	tolerance := 1e-02
-	if !want.Equals(*got, tolerance) {
+	if !got.Equal(want) {
 		t.Errorf("\nwant %v\n got %v", want, got)
 	}
 }
@@ -300,7 +300,6 @@ func jsonDiff(t *testing.T, want, got []byte) string {
 	}
 
 	var dGot interface{}
-	fmt.Println(string(got))
 	if err := json.Unmarshal(got, &dGot); err != nil {
 		t.Fatalf("decoding got: %v", err)
 	}

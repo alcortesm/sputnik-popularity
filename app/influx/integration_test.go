@@ -13,10 +13,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/influxdata/influxdb-client-go/v2/api/write"
 
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 	"github.com/alcortesm/sputnik-popularity/app/influx"
-	"github.com/alcortesm/sputnik-popularity/app/pair"
 )
 
 const (
@@ -51,7 +50,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("creating InfluxDB org and bucket: %v", err)
 	}
 
-	fmt.Printf("debug info: %s\n", org)
+	fmt.Println("debug info:")
 	fmt.Printf("\torg: %s\n", org)
 	fmt.Printf("\tbucket: %s\n", bucket)
 	fmt.Printf("\ttoken: %s\n", token)
@@ -135,27 +134,9 @@ func influxCreateOrgBucket() (string, error) {
 	return *setup.Auth.Token, nil
 }
 
-func TestInflux(t *testing.T) {
+func TestInflux_AddGet(t *testing.T) {
 	t.Parallel()
 
-	subtests := map[string]func(t *testing.T){
-		"add should store pairs":           add,
-		"get should return pairs":          get,
-		"get should return what you added": addGet,
-	}
-
-	for name, testFunc := range subtests {
-		testFunc := testFunc
-
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			testFunc(t)
-		})
-	}
-}
-
-func add(t *testing.T) {
 	fix := struct {
 		measurement string
 		field       string
@@ -168,13 +149,17 @@ func add(t *testing.T) {
 		timeout:     10 * time.Second,
 	}
 
-	pairs := []pair.Pair{
-		{Value: 1.0, Timestamp: fix.start.Add(1 * time.Second)},
-		{Value: 2.0, Timestamp: fix.start.Add(2 * time.Second)},
-		{Value: 3.0, Timestamp: fix.start.Add(3 * time.Second)},
+	t1 := fix.start.Add(1 * time.Second)
+	t2 := fix.start.Add(2 * time.Second)
+	t3 := fix.start.Add(3 * time.Second)
+
+	data := []*gym.Utilization{
+		{Timestamp: t1, People: 1, Capacity: 42},
+		{Timestamp: t2, People: 2, Capacity: 42},
+		{Timestamp: t3, People: 3, Capacity: 42},
 	}
 
-	// Add some pairs to the DB using influx.Store.
+	// Add some utilization data to the DB
 	{
 		store, cancel := influx.NewStore(
 			influx.Config{
@@ -184,7 +169,6 @@ func add(t *testing.T) {
 				Bucket:     bucket,
 			},
 			fix.measurement,
-			fix.field,
 		)
 		t.Cleanup(cancel)
 
@@ -192,117 +176,13 @@ func add(t *testing.T) {
 			context.Background(), fix.timeout)
 		t.Cleanup(cancel)
 
-		if err := store.Add(ctx, pairs...); err != nil {
+		if err := store.Add(ctx, data...); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Check the pairs have been correctly added using the official
-	// influx driver.
-	var got []pair.Pair
-	{
-		client := influxdb2.NewClient(dbURL, token)
-		t.Cleanup(client.Close)
-
-		query := fmt.Sprintf(`from(bucket:%q)
-		    |> range(start: %s)
-			|> filter( fn: (r) =>
-				(r._measurement == %q) and
-				(r._field == %q)
-			)`,
-			bucket,
-			fix.start.Format(time.RFC3339),
-			fix.measurement,
-			fix.field,
-		)
-
-		ctx, cancel := context.WithTimeout(
-			context.Background(), fix.timeout)
-		t.Cleanup(cancel)
-
-		table, err := client.QueryAPI(org).Query(ctx, query)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for table.Next() {
-			r := table.Record()
-			ts := r.Time().UTC()
-			v := r.Value()
-
-			asFloat, ok := v.(float64)
-			if !ok {
-				t.Fatalf("value (%#v, %[1]T) at time %s is not a float64",
-					v, ts.Format(time.RFC3339))
-			}
-
-			got = append(got, pair.Pair{
-				Value:     asFloat,
-				Timestamp: ts,
-			})
-		}
-
-		if err := table.Err(); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if diff := cmp.Diff(pairs, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func get(t *testing.T) {
-	fix := struct {
-		measurement string
-		field       string
-		start       time.Time
-		timeout     time.Duration
-	}{
-		measurement: "m_" + t.Name(),
-		field:       "test_field",
-		start:       year2020,
-		timeout:     10 * time.Second,
-	}
-
-	pairs := []pair.Pair{
-		{Value: 1.0, Timestamp: fix.start.Add(1 * time.Second)},
-		{Value: 2.0, Timestamp: fix.start.Add(2 * time.Second)},
-		{Value: 3.0, Timestamp: fix.start.Add(3 * time.Second)},
-	}
-
-	// Add some pairs to the DB using the official driver.
-	{
-		points := make([]*write.Point, len(pairs))
-
-		for i, p := range pairs {
-			tags := map[string]string(nil)
-			fields := map[string]interface{}{fix.field: p.Value}
-			points[i] = write.NewPoint(
-				fix.measurement,
-				tags,
-				fields,
-				p.Timestamp.UTC(),
-			)
-		}
-
-		client := influxdb2.NewClient(dbURL, token)
-		t.Cleanup(client.Close)
-
-		ctx, cancel := context.WithTimeout(
-			context.Background(), fix.timeout)
-		t.Cleanup(cancel)
-
-		err := client.WriteAPIBlocking(org, bucket).
-			WritePoint(ctx, points...)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-	}
-
-	// get the pairs from the DB using influx.Store.
-	var got []pair.Pair
+	// get the utilization data from the DB
+	var got []*gym.Utilization
 	{
 		store, cancel := influx.NewStore(
 			influx.Config{
@@ -312,80 +192,6 @@ func get(t *testing.T) {
 				Bucket:    bucket,
 			},
 			fix.measurement,
-			fix.field,
-		)
-		t.Cleanup(cancel)
-
-		ctx, cancel := context.WithTimeout(
-			context.Background(), fix.timeout)
-		t.Cleanup(cancel)
-
-		var err error
-		got, err = store.Get(ctx, fix.start)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if diff := cmp.Diff(pairs, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func addGet(t *testing.T) {
-	fix := struct {
-		measurement string
-		field       string
-		start       time.Time
-		timeout     time.Duration
-	}{
-		measurement: "m_" + t.Name(),
-		field:       "test_field",
-		start:       year2020,
-		timeout:     10 * time.Second,
-	}
-
-	pairs := []pair.Pair{
-		{Value: 1.0, Timestamp: fix.start.Add(1 * time.Second)},
-		{Value: 2.0, Timestamp: fix.start.Add(2 * time.Second)},
-		{Value: 3.0, Timestamp: fix.start.Add(3 * time.Second)},
-	}
-
-	// Add some pairs to the DB using influx.Store.
-	{
-		store, cancel := influx.NewStore(
-			influx.Config{
-				URL:        dbURL,
-				Org:        org,
-				TokenWrite: token,
-				Bucket:     bucket,
-			},
-			fix.measurement,
-			fix.field,
-		)
-		t.Cleanup(cancel)
-
-		ctx, cancel := context.WithTimeout(
-			context.Background(), fix.timeout)
-		t.Cleanup(cancel)
-
-		if err := store.Add(ctx, pairs...); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// get the pairs from the DB using influx.Store.
-	var got []pair.Pair
-	{
-		store, cancel := influx.NewStore(
-			influx.Config{
-				URL:       dbURL,
-				Org:       org,
-				TokenRead: token,
-				Bucket:    bucket,
-			},
-			fix.measurement,
-			fix.field,
 		)
 		t.Cleanup(cancel)
 
@@ -399,7 +205,7 @@ func addGet(t *testing.T) {
 		}
 	}
 
-	if diff := cmp.Diff(pairs, got); diff != "" {
+	if diff := cmp.Diff(data, got); diff != "" {
 		t.Errorf("(-want +got)\n%s", diff)
 	}
 }

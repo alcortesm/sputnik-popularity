@@ -2,21 +2,25 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/alcortesm/sputnik-popularity/app/gym"
 	"github.com/alcortesm/sputnik-popularity/app/influx"
-	"github.com/alcortesm/sputnik-popularity/app/pair"
 	"github.com/alcortesm/sputnik-popularity/app/scrape"
-	"github.com/alcortesm/sputnik-popularity/app/web"
-	"github.com/alcortesm/sputnik-popularity/pkg/httpdeco"
+)
+
+const (
+	influxMeasurement = "capacity_utilization"
+	influxField       = "percent"
 )
 
 type Config struct {
@@ -25,11 +29,8 @@ type Config struct {
 }
 
 func main() {
-	ctx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	logger := log.New(os.Stdout, "",
-		log.Ldate|log.Ltime|log.LUTC)
+	logger := log.New(os.Stdout, "app ",
+		log.Ldate|log.Ltime|log.LUTC|log.Lmsgprefix)
 
 	logger.Println("starting app...")
 
@@ -40,70 +41,42 @@ func main() {
 		logger.Fatalf("processign environment variables: %v", err)
 	}
 
-	/*
-		if err := testScraper(ctx, logger, config.Scrape); err != nil {
-			logger.Fatalf("testing scraper: %v", err)
-		}
-	*/
-
-	capacity := 5
-
-	popularity, err := web.NewPopularity(capacity)
-	if err != nil {
-		logger.Fatalf("creating popularity: %v", err)
-	}
-
-	http.Handle("/popularity.html", httpdeco.Decorate(
-		http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-type", "text/html")
-				w.Write(popularity.HTML())
-			},
-		),
-		httpdeco.WithLogs(logger),
-	))
-
-	http.Handle("/style.css", httpdeco.Decorate(
-		web.StyleHandler(),
-		httpdeco.WithLogs(logger),
-	))
-
-	http.Handle("/", httpdeco.Decorate(
-		http.NotFoundHandler(),
-		httpdeco.WithLogs(logger),
-	))
-
-	port := "8080"
-
-	server := &http.Server{
-		Addr:         ":" + port,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
-
-	go addDemoValues(popularity, logger)
-
-	go func() {
-		logger.Printf("starting server at port %s...\n", port)
-
-		err := server.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
-		}
-	}()
-
-	<-ctx.Done()
-
-	log.Println("signal received: stopping server...")
-
-	shutdownCtx, cancel := context.WithTimeout(
-		context.Background(),
-		10*time.Second,
-	)
+	signalCtx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("shutting down server: %+v", err)
+	scrapedData := make(chan *gym.Utilization)
+	scrapeTicker := time.NewTicker(config.Scrape.Period)
+	defer scrapeTicker.Stop()
+
+	g, ctx := errgroup.WithContext(signalCtx)
+
+	// launch a scraper of gym utilization data
+	g.Go(func() error {
+		return scrape.Run(
+			ctx,
+			logger,
+			config.Scrape,
+			scrapeTicker.C,
+			scrapedData,
+		)
+	})
+
+	// launch a processor for the scraped data
+	g.Go(func() error {
+		return processScrapedData(
+			ctx,
+			logger,
+			config.InfluxDB,
+			scrapedData,
+		)
+	})
+
+	if err := g.Wait(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			logger.Printf("stopping the app: signal received\n")
+		} else {
+			logger.Printf("stopping the app: %v\n", err)
+		}
 	}
 }
 
@@ -127,42 +100,35 @@ func signalContext(signals ...os.Signal) (
 	return ctx, cancel
 }
 
-func addDemoValues(p *web.Popularity, logger *log.Logger) {
-	var value float64 = 0.0
-
-	for {
-		time.Sleep(time.Second)
-		value++
-		pair := pair.Pair{
-			Timestamp: time.Now(),
-			Value:     value,
-		}
-		if err := p.Add(pair); err != nil {
-			logger.Fatalf("adding pair %v: %v", pair, err)
-		}
-	}
-}
-
-func testScraper(
+func processScrapedData(
 	ctx context.Context,
 	logger *log.Logger,
-	config scrape.Config,
+	config influx.Config,
+	scraped <-chan *gym.Utilization,
 ) error {
-	client := &http.Client{Timeout: 10 * time.Second}
+	logger.Println("start processing scraped data...")
+	defer logger.Println("stopped processing scraped data")
 
-	scraper := scrape.NewScraper(
-		logger,
-		client,
-		time.Now,
+	store, cancel := influx.NewStore(
 		config,
+		influxMeasurement,
 	)
+	defer cancel()
 
-	pair, err := scraper.Scrape(ctx)
-	if err != nil {
-		return fmt.Errorf("scraping: %v", err)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case u, ok := <-scraped:
+			if !ok {
+				return fmt.Errorf("closed scraped data channel")
+			}
+
+			if err := store.Add(ctx, u); err != nil {
+				logger.Printf("adding to store: %v\n", err)
+			}
+
+			logger.Printf("debug: %v was stored in InfluxDB", u)
+		}
 	}
-
-	fmt.Println(pair)
-
-	return nil
 }
