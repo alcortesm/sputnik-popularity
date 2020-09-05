@@ -135,8 +135,6 @@ func Run(
 			return fmt.Errorf("scraping: %v", err)
 		}
 
-		logger.Printf("debug: scraped %v\n", u)
-
 		scraped <- u
 
 		// wait for a trigger or a cancelation of the context
