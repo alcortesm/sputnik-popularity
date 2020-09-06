@@ -127,21 +127,20 @@ func startScraping(
 		scraped <- u
 	}
 
-	for waitForTrigger := false; ; waitForTrigger = true {
-		if waitForTrigger {
-			// wait for a trigger or a cancelation of the context
-			select {
-			case _, ok := <-trigger:
-				if !ok {
-					return fmt.Errorf("%s: closed trigger channel", prefix)
-				}
-			case <-ctx.Done():
-				return fmt.Errorf("%s: %w", prefix, ctx.Err())
-			}
+	do()
 
-			do()
+	for {
+		// wait for a trigger or a cancelation of the context
+		select {
+		case _, ok := <-trigger:
+			if !ok {
+				return fmt.Errorf("%s: closed trigger channel", prefix)
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("%s: %w", prefix, ctx.Err())
 		}
 
+		do()
 	}
 
 	return nil
