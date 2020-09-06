@@ -50,7 +50,7 @@ Here I'm using the Google Cloud Container Registry
 and I assume PROJECT\_ID holds the ID of one of my projects in Google Cloud:
 
 ```
-; docker tag sputnik:latest gcr.io/$PROJECT_ID/sputnik:latest .
+; docker tag sputnik:latest gcr.io/$PROJECT_ID/sputnik:latest
 ; docker push gcr.io/$PROJECT_ID/sputnik:latest
 ```
 
