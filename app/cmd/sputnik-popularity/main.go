@@ -117,6 +117,16 @@ func startScraping(
 		config,
 	)
 
+	do := func() {
+		u, err := scraper.Scrape(ctx)
+		if err != nil {
+			logger.Printf("%s: %v\n", prefix, err)
+			return
+		}
+
+		scraped <- u
+	}
+
 	for waitForTrigger := false; ; waitForTrigger = true {
 		if waitForTrigger {
 			// wait for a trigger or a cancelation of the context
@@ -128,19 +138,10 @@ func startScraping(
 			case <-ctx.Done():
 				return fmt.Errorf("%s: %w", prefix, ctx.Err())
 			}
+
+			do()
 		}
 
-		u, err := scraper.Scrape(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return fmt.Errorf("%s: %w", prefix, err)
-			}
-
-			logger.Printf("%s: %v\n", prefix, err)
-			continue
-		}
-
-		scraped <- u
 	}
 
 	return nil
@@ -160,6 +161,12 @@ func processScrapedData(
 	store, cancel := influx.NewStore(config)
 	defer cancel()
 
+	do := func(u *gym.Utilization) {
+		if err := store.Add(ctx, u); err != nil {
+			logger.Printf("%s: adding to store: %v\n", prefix, err)
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -169,9 +176,7 @@ func processScrapedData(
 				return fmt.Errorf("%s: closed data channel", prefix)
 			}
 
-			if err := store.Add(ctx, u); err != nil {
-				logger.Printf("%s: adding to store: %v\n", prefix, err)
-			}
+			do(u)
 		}
 	}
 }

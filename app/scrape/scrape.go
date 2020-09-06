@@ -62,14 +62,14 @@ func (s *Scraper) Scrape(ctx context.Context) (*gym.Utilization, error) {
 		strings.NewReader(s.body),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return nil, fmt.Errorf("creating request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed POST %s: %w", s.url, err)
+		return nil, fmt.Errorf("failed POST %s: %v", s.url, err)
 	}
 
 	defer resp.Body.Close()
