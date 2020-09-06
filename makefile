@@ -28,11 +28,11 @@ integration_test:
 		--remove-orphans \
 		--detach
 	result=$$(docker wait $(project)_tester_1); \
-	if [ $${result} != 0 ]; then \
-		docker-compose $(dc-flags) stop; \
-		docker-compose $(dc-flags) logs; \
-		false; \
-	fi
+		if [ $${result} != 0 ]; then \
+			docker-compose $(dc-flags) stop; \
+			docker-compose $(dc-flags) logs; \
+			false; \
+		fi
 	docker-compose $(dc-flags) logs tester
 
 .PHONY: integration_clean
@@ -56,11 +56,11 @@ e2e_test:
 		--remove-orphans \
 		--detach
 	result=$$(docker wait $(project)_tester_1); \
-	if [ $${result} != 0 ]; then \
-		docker-compose $(dc-flags) stop; \
-		docker-compose $(dc-flags) logs; \
-		false; \
-	fi
+		if [ $${result} != 0 ]; then \
+			docker-compose $(dc-flags) stop; \
+			docker-compose $(dc-flags) logs; \
+			false; \
+		fi
 	docker-compose $(dc-flags) logs tester
 
 .PHONY: e2e_clean

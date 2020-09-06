@@ -163,12 +163,12 @@ func TestInflux_AddGet(t *testing.T) {
 	{
 		store, cancel := influx.NewStore(
 			influx.Config{
-				URL:        dbURL,
-				Org:        org,
-				TokenWrite: token,
-				Bucket:     bucket,
+				URL:         dbURL,
+				Org:         org,
+				TokenWrite:  token,
+				Bucket:      bucket,
+				Measurement: fix.measurement,
 			},
-			fix.measurement,
 		)
 		t.Cleanup(cancel)
 
@@ -186,12 +186,12 @@ func TestInflux_AddGet(t *testing.T) {
 	{
 		store, cancel := influx.NewStore(
 			influx.Config{
-				URL:       dbURL,
-				Org:       org,
-				TokenRead: token,
-				Bucket:    bucket,
+				URL:         dbURL,
+				Org:         org,
+				TokenRead:   token,
+				Bucket:      bucket,
+				Measurement: fix.measurement,
 			},
-			fix.measurement,
 		)
 		t.Cleanup(cancel)
 
