@@ -47,18 +47,18 @@ This will generate an small image (~11MB) tagged `sputnik:latest` with the binar
 
 Now, push the image to a docker container registry of your choosing.
 Here I'm using the Google Cloud Container Registry
-and I assume PROJECT\_ID is the ID of one of my projects in Google Cloud:
+and I assume PROJECT\_ID holds the ID of one of my projects in Google Cloud:
 
 ```
-; docker tag sputnik:latest gcr.io/PROJECT_ID/sputnik:latest
-; docker push gcr.io/PROJECT_ID/sputnik:latest
+; docker tag sputnik:latest gcr.io/$PROJECT_ID/sputnik:latest .
+; docker push gcr.io/$PROJECT_ID/sputnik:latest
 ```
 
 Connect to a Google Compute Engine instance and run the docker image.
-Here I assume INSTANCE\_NAME is the name of one of my virtual machines in Google Compute Engine:
+Here I assume INSTANCE\_NAME holds the name of one of my virtual machines in Google Compute Engine:
 
 ```
-; gcloud compute ssh INSTANCE_NAME
+; gcloud compute ssh $INSTANCE_NAME
 name@instance ~ $  docker run \
     --name sputnik \
     --detach \
@@ -67,7 +67,7 @@ name@instance ~ $  docker run \
     --env SPUTNIK_INFLUXDB_TOKEN_READ="..." \
     --env SPUTNIK_SCRAPE_URL="..." \
     --log-driver=gcplogs \
-    gcr.io/PROJECT_ID/sputnik_popularity
+    gcr.io/$PROJECT_ID/sputnik_popularity
 ```
 
 This will create a container named `sputnik` and send the app logs to the Google Cloud Logs Viewer.
