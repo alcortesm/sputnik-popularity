@@ -19,11 +19,12 @@ func init() {
 }
 
 type Config struct {
-	URL        string `required:"true"`
-	TokenWrite string `required:"true" split_words:"true"`
-	TokenRead  string `required:"true" split_words:"true"`
-	Org        string `default:"tsDemo"`
-	Bucket     string `default:"sputnik_popularity"`
+	URL         string `required:"true"`
+	TokenWrite  string `required:"true" split_words:"true"`
+	TokenRead   string `required:"true" split_words:"true"`
+	Org         string `default:"tsDemo"`
+	Bucket      string `default:"sputnik_popularity"`
+	Measurement string `default:"capacity_utilization"`
 }
 
 const (
@@ -32,17 +33,13 @@ const (
 )
 
 type Store struct {
-	measurement string
-	config      Config
-	bucket      string
-	writeAPI    api.WriteAPIBlocking
-	queryAPI    api.QueryAPI
+	config   Config
+	bucket   string
+	writeAPI api.WriteAPIBlocking
+	queryAPI api.QueryAPI
 }
 
-func NewStore(
-	config Config,
-	measurement string,
-) (store *Store, cancel func()) {
+func NewStore(config Config) (store *Store, cancel func()) {
 	opts := influxdb2.DefaultOptions().
 		SetPrecision(time.Second)
 
@@ -59,10 +56,9 @@ func NewStore(
 	)
 
 	store = &Store{
-		measurement: measurement,
-		config:      config,
-		writeAPI:    wc.WriteAPIBlocking(config.Org, config.Bucket),
-		queryAPI:    rc.QueryAPI(config.Org),
+		config:   config,
+		writeAPI: wc.WriteAPIBlocking(config.Org, config.Bucket),
+		queryAPI: rc.QueryAPI(config.Org),
 	}
 
 	cancel = func() {
@@ -85,7 +81,7 @@ func (s *Store) Add(ctx context.Context, data ...*gym.Utilization) error {
 			}
 
 			points[i] = influxdb2.NewPoint(
-				s.measurement,
+				s.config.Measurement,
 				noTags,
 				fields,
 				d.Timestamp,
@@ -120,7 +116,7 @@ func (s *Store) Get(
 			)`,
 		s.config.Bucket,
 		since.Format(time.RFC3339),
-		s.measurement,
+		s.config.Measurement,
 		peopleFieldKey,
 		capacityFieldKey,
 	)

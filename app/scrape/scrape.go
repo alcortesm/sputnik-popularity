@@ -62,14 +62,14 @@ func (s *Scraper) Scrape(ctx context.Context) (*gym.Utilization, error) {
 		strings.NewReader(s.body),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %v", err)
+		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed POST %s: %v", s.url, err)
+		return nil, fmt.Errorf("failed POST %s: %w", s.url, err)
 	}
 
 	defer resp.Body.Close()
@@ -108,46 +108,4 @@ func (s *Scraper) Scrape(ctx context.Context) (*gym.Utilization, error) {
 	}
 
 	return result, nil
-}
-
-func Run(
-	ctx context.Context,
-	logger *log.Logger,
-	config Config,
-	trigger <-chan time.Time,
-	scraped chan<- *gym.Utilization,
-) error {
-	logger.Println("start scraping...")
-	defer logger.Println("stopped scraping")
-
-	client := &http.Client{Timeout: config.Timeout * time.Second}
-
-	scraper := NewScraper(
-		logger,
-		client,
-		time.Now,
-		config,
-	)
-
-	for {
-		u, err := scraper.Scrape(ctx)
-		if err != nil {
-			return fmt.Errorf("scraping: %v", err)
-		}
-
-		scraped <- u
-
-		// wait for a trigger or a cancelation of the context
-		select {
-		case _, ok := <-trigger:
-			if !ok {
-				return fmt.Errorf("closed trigger channel")
-			}
-			continue
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return nil
 }

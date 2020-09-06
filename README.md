@@ -8,6 +8,13 @@ allows to see how popular it has been over the past few days.
 It scrapes my gym's capacity utilization endpoint and store the data in an InfluxDB instance.
 A web front end shows the utilization during the last couple of weeks.
 
+## How to run the tests
+
+There are 3 types of tests: unit, integration and e2e.
+You can run all of them with `make test`.
+
+To run them individually use `make unit`, `make integration` or `make e2e`.
+
 ## How to run the project
 
 Some environment variables are required to run the project:
@@ -26,7 +33,7 @@ you can run the project locally with:
 ; go run ./app/cmd/sputnik-popularity
 ```
 
-### Run as a docker container in Google Cloud Engine
+### Run as a docker container in Google Compute Engine
 
 First build a docker image of the project:
 
@@ -48,7 +55,7 @@ and I assume PROJECT\_ID is the ID of one of my projects in Google Cloud:
 ```
 
 Connect to a Google Compute Engine instance and run the docker image.
-Here I assume INSTANCE\_NAME is the name of one of my virtual machines in Google Cloud Engine:
+Here I assume INSTANCE\_NAME is the name of one of my virtual machines in Google Compute Engine:
 
 ```
 ; gcloud compute ssh INSTANCE_NAME

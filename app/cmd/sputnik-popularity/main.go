@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,11 +19,6 @@ import (
 	"github.com/alcortesm/sputnik-popularity/app/scrape"
 )
 
-const (
-	influxMeasurement = "capacity_utilization"
-	influxField       = "percent"
-)
-
 type Config struct {
 	InfluxDB influx.Config
 	Scrape   scrape.Config
@@ -32,13 +28,11 @@ func main() {
 	logger := log.New(os.Stdout, "app ",
 		log.Ldate|log.Ltime|log.LUTC|log.Lmsgprefix)
 
-	logger.Println("starting app...")
-
 	var config Config
 	envPrefix := "SPUTNIK"
 	err := envconfig.Process(envPrefix, &config)
 	if err != nil {
-		logger.Fatalf("processign environment variables: %v", err)
+		logger.Fatalf("failed to start app: processign env vars: %v", err)
 	}
 
 	signalCtx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
@@ -52,7 +46,7 @@ func main() {
 
 	// launch a scraper of gym utilization data
 	g.Go(func() error {
-		return scrape.Run(
+		return startScraping(
 			ctx,
 			logger,
 			config.Scrape,
@@ -70,6 +64,8 @@ func main() {
 			scrapedData,
 		)
 	})
+
+	logger.Println("starting app...")
 
 	if err := g.Wait(); err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -100,32 +96,81 @@ func signalContext(signals ...os.Signal) (
 	return ctx, cancel
 }
 
+func startScraping(
+	ctx context.Context,
+	logger *log.Logger,
+	config scrape.Config,
+	trigger <-chan time.Time,
+	scraped chan<- *gym.Utilization,
+) error {
+	const prefix = "scraping"
+
+	logger.Printf("%s: started...", prefix)
+	defer logger.Printf("%s: stopped", prefix)
+
+	client := &http.Client{Timeout: config.Timeout * time.Second}
+
+	scraper := scrape.NewScraper(
+		logger,
+		client,
+		time.Now,
+		config,
+	)
+
+	for waitForTrigger := false; ; waitForTrigger = true {
+		if waitForTrigger {
+			// wait for a trigger or a cancelation of the context
+			select {
+			case _, ok := <-trigger:
+				if !ok {
+					return fmt.Errorf("%s: closed trigger channel", prefix)
+				}
+			case <-ctx.Done():
+				return fmt.Errorf("%s: %w", prefix, ctx.Err())
+			}
+		}
+
+		u, err := scraper.Scrape(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return fmt.Errorf("%s: %w", prefix, err)
+			}
+
+			logger.Printf("%s: %v\n", prefix, err)
+			continue
+		}
+
+		scraped <- u
+	}
+
+	return nil
+}
+
 func processScrapedData(
 	ctx context.Context,
 	logger *log.Logger,
 	config influx.Config,
 	scraped <-chan *gym.Utilization,
 ) error {
-	logger.Println("start processing scraped data...")
-	defer logger.Println("stopped processing scraped data")
+	const prefix = "processing scraped data"
 
-	store, cancel := influx.NewStore(
-		config,
-		influxMeasurement,
-	)
+	logger.Printf("%s: started...\n", prefix)
+	defer logger.Printf("%s: stopped\n", prefix)
+
+	store, cancel := influx.NewStore(config)
 	defer cancel()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("%s: %w", prefix, ctx.Err())
 		case u, ok := <-scraped:
 			if !ok {
-				return fmt.Errorf("closed scraped data channel")
+				return fmt.Errorf("%s: closed data channel", prefix)
 			}
 
 			if err := store.Add(ctx, u); err != nil {
-				logger.Printf("adding to store: %v\n", err)
+				logger.Printf("%s: adding to store: %v\n", prefix, err)
 			}
 		}
 	}
