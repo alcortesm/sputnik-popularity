@@ -35,7 +35,7 @@ func main() {
 	logger.Println("starting app...")
 
 	var config Config
-	envPrefix := "SPUTNIK_POPULARITY"
+	envPrefix := "SPUTNIK"
 	err := envconfig.Process(envPrefix, &config)
 	if err != nil {
 		logger.Fatalf("processign environment variables: %v", err)

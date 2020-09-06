@@ -69,3 +69,7 @@ e2e_clean: project := e2e
 e2e_clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
 e2e_clean:
 	docker-compose $(dc-flags) rm -v --stop --force
+
+.PHONY: docker_image
+docker_image:
+	docker build -t sputnik --target=run_app .
