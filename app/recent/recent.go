@@ -10,15 +10,20 @@ import (
 )
 
 // Cache is a collection of gym.Utilization values. It remembers the
-// newest values and forgets values older than a certain retention span
-// before the newest one. It doesn't care about when the values are
-// added just about their timestamps.
+// newest values and forgets the ones older older than a retention span
+// before the newest one.
+//
+// The cache ignores values added already added to the cache.
+//
+// Note: The cache doesn't care about when the values are added just
+// about their timestamps.
 type Cache struct {
 	retention time.Duration
 	mux       sync.Mutex
 	data      []*gym.Utilization
 }
 
+// NewCache returns a new cache with the give retention period.
 func NewCache(retention time.Duration) (*Cache, error) {
 	if retention == 0 {
 		return nil, fmt.Errorf("retention must be >0, was %v", retention)
@@ -27,6 +32,9 @@ func NewCache(retention time.Duration) (*Cache, error) {
 	return &Cache{retention: retention}, nil
 }
 
+// Add adds values to the cache, ignoring the ones already in it.  After
+// adding these values, all values in the cache older than its newest
+// value minus the retention period will be forgotten.
 func (r *Cache) Add(data ...*gym.Utilization) {
 	if len(data) == 0 {
 		return
@@ -42,6 +50,7 @@ func (r *Cache) Add(data ...*gym.Utilization) {
 	})
 
 	r.trim()
+	r.unique()
 }
 
 // Trim removes elements from r.data with a timestamp older than the
@@ -62,7 +71,28 @@ func (r *Cache) trim() {
 	r.data = r.data[first:]
 }
 
-// Get returns the most recent utilization values or an empty string if
+// Unique removes duplicated values from the cache. It assumes the data
+// is sorted chronologically and the mutex is locked.
+func (r *Cache) unique() {
+	if len(r.data) < 2 {
+		return
+	}
+
+	unique := make([]*gym.Utilization, 0, len(r.data))
+	unique = append(unique, r.data[0])
+
+	for _, d := range r.data[1:] {
+		if d.Equal(unique[len(unique)-1]) {
+			continue
+		}
+
+		unique = append(unique, d)
+	}
+
+	r.data = unique
+}
+
+// Get returns the most recent utilization values or an empty slice if
 // the cache is still empty.
 func (r *Cache) Get() []*gym.Utilization {
 	r.mux.Lock()

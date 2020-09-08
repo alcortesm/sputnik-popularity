@@ -22,6 +22,9 @@ func TestCache(t *testing.T) {
 		"adding zero elements is ok":           canAddZeroElements,
 		"forgets old values in the same batch": forgetsOldInSameBatch,
 		"forgets values in old batches":        forgetsOldInOtherBatches,
+		"adding old values is ok":              canAddOldValues,
+		"ignores repeated values on add":       ignoreRepeatedAdd,
+		"ignores repeated values on forget":    ignoreRepeatedForget,
 	}
 
 	for name, fn := range subtests {
@@ -197,6 +200,94 @@ func forgetsOldInOtherBatches(t *testing.T) {
 
 	got := cache.Get()
 	want := []*gym.Utilization{u3, u4, u5, u6}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("(-want +got)\n%s", diff)
+	}
+}
+
+func canAddOldValues(t *testing.T) {
+	// u1 and u2 will be forgotten due to a small retention period
+	u1 := fixDataPoint(t, 1)
+	u2 := fixDataPoint(t, 2)
+	u3 := fixDataPoint(t, 3)
+	u4 := fixDataPoint(t, 4)
+
+	oldBatch := []*gym.Utilization{u2, u4}
+	newBatch := []*gym.Utilization{u1, u3}
+
+	// enough to remember everything
+	retention := 3 * time.Second
+
+	cache, err := recent.NewCache(retention)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cache.Add(oldBatch...)
+	cache.Add(newBatch...)
+
+	got := cache.Get()
+	want := []*gym.Utilization{u1, u2, u3, u4}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("(-want +got)\n%s", diff)
+	}
+}
+
+func ignoreRepeatedAdd(t *testing.T) {
+	u1 := fixDataPoint(t, 1)
+	u2 := fixDataPoint(t, 2)
+	u3 := fixDataPoint(t, 3)
+	u4 := fixDataPoint(t, 4)
+
+	oldBatch := []*gym.Utilization{u1, u2, u4}
+	newBatch := []*gym.Utilization{u2, u3, u4}
+
+	// enough to remember everything added
+	retention := 3 * time.Second
+
+	cache, err := recent.NewCache(retention)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cache.Add(oldBatch...)
+	cache.Add(newBatch...)
+
+	got := cache.Get()
+	want := []*gym.Utilization{u1, u2, u3, u4}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("(-want +got)\n%s", diff)
+	}
+}
+
+func ignoreRepeatedForget(t *testing.T) {
+	// u1 and u2 will be forgotten due to a small retention period
+	u1 := fixDataPoint(t, 1)
+	u2 := fixDataPoint(t, 2)
+	u3 := fixDataPoint(t, 3)
+	u4 := fixDataPoint(t, 4)
+	u5 := fixDataPoint(t, 5)
+
+	oldBatch := []*gym.Utilization{u1, u2, u3, u4}
+	newBatch := []*gym.Utilization{u1, u3, u5}
+
+	// enough to remember the first batch, then forget u1 and u2 when
+	// the second batch arrives.
+	retention := 2 * time.Second
+
+	cache, err := recent.NewCache(retention)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cache.Add(oldBatch...)
+	cache.Add(newBatch...)
+
+	got := cache.Get()
+	want := []*gym.Utilization{u3, u4, u5}
 
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("(-want +got)\n%s", diff)
