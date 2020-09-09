@@ -1,5 +1,8 @@
 package recent
 
+// TODO: we need a better name for this package it is an excelent
+// variable name for a the Cache defined here.
+
 import (
 	"fmt"
 	"sort"

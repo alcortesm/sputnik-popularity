@@ -218,6 +218,10 @@ func forgetsOldValues(t *testing.T) {
 			name:    "two batches, interleaved, unsorted, repeated",
 			batches: [][]*gym.Utilization{{u3, u2, u1}, {u3, u4, u5, u2}},
 			want:    []*gym.Utilization{u3, u4, u5},
+		}, {
+			name:    "a very new value forces to forget all old values",
+			batches: [][]*gym.Utilization{{u1, u2}, {u5}},
+			want:    []*gym.Utilization{u5},
 		},
 	}
 

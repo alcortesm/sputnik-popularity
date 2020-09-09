@@ -16,12 +16,14 @@ import (
 
 	"github.com/alcortesm/sputnik-popularity/app/gym"
 	"github.com/alcortesm/sputnik-popularity/app/influx"
+	"github.com/alcortesm/sputnik-popularity/app/recent"
 	"github.com/alcortesm/sputnik-popularity/app/scrape"
 )
 
 type Config struct {
-	InfluxDB influx.Config
-	Scrape   scrape.Config
+	InfluxDB        influx.Config
+	Scrape          scrape.Config
+	RecentRetention time.Duration `default:"14d" split_words:"true"`
 }
 
 func main() {
@@ -33,6 +35,11 @@ func main() {
 	err := envconfig.Process(envPrefix, &config)
 	if err != nil {
 		logger.Fatalf("failed to start app: processign env vars: %v", err)
+	}
+
+	latest, err := recent.Cache(config.RecentRetention)
+	if err != nil {
+		logger.Fatalf("failed to start app: creating a recent.Cache: %v", err)
 	}
 
 	signalCtx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
@@ -62,6 +69,7 @@ func main() {
 			logger,
 			config.InfluxDB,
 			scrapedData,
+			latest,
 		)
 	})
 
@@ -151,6 +159,7 @@ func processScrapedData(
 	logger *log.Logger,
 	config influx.Config,
 	scraped <-chan *gym.Utilization,
+	latest Adder,
 ) error {
 	const prefix = "processing scraped data"
 
@@ -161,9 +170,13 @@ func processScrapedData(
 	defer cancel()
 
 	do := func(u *gym.Utilization) {
-		if err := store.Add(ctx, u); err != nil {
-			logger.Printf("%s: adding to store: %v\n", prefix, err)
-		}
+		go func() {
+			if err := store.Add(ctx, u); err != nil {
+				logger.Printf("%s: adding to store: %v\n", prefix, err)
+			}
+		}()
+
+		go latest.Add(u)
 	}
 
 	for {
@@ -178,4 +191,13 @@ func processScrapedData(
 			do(u)
 		}
 	}
+}
+
+// Adder know how to store gym Utilization data, for example, a
+// recent.Cache.
+//
+// TODO: this should really be like the influx.Store.Add method instead,
+// with context and returning and error.
+type Adder interface {
+	Add(...*gym.Utilization)
 }
