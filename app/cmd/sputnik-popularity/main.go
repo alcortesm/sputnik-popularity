@@ -18,12 +18,22 @@ import (
 	"github.com/alcortesm/sputnik-popularity/app/influx"
 	"github.com/alcortesm/sputnik-popularity/app/recent"
 	"github.com/alcortesm/sputnik-popularity/app/scrape"
+	"github.com/alcortesm/sputnik-popularity/app/web"
+	"github.com/alcortesm/sputnik-popularity/pkg/httpdeco"
 )
 
 type Config struct {
 	InfluxDB        influx.Config
 	Scrape          scrape.Config
-	RecentRetention time.Duration `default:"14d" split_words:"true"`
+	RecentRetention time.Duration `default:"168h" split_words:"true"`
+	Web             Web
+}
+
+type Web struct {
+	Port            int           `default:"8080"`
+	ReadTimeout     time.Duration `default:"10s"`
+	WriteTimeout    time.Duration `default:"10s"`
+	ShutdownTimeout time.Duration `default:"10s"`
 }
 
 func main() {
@@ -37,7 +47,7 @@ func main() {
 		logger.Fatalf("failed to start app: processign env vars: %v", err)
 	}
 
-	latest, err := recent.Cache(config.RecentRetention)
+	latest, err := recent.NewCache(config.RecentRetention)
 	if err != nil {
 		logger.Fatalf("failed to start app: creating a recent.Cache: %v", err)
 	}
@@ -69,6 +79,16 @@ func main() {
 			logger,
 			config.InfluxDB,
 			scrapedData,
+			latest,
+		)
+	})
+
+	// launch the web server
+	g.Go(func() error {
+		return launchWebServer(
+			ctx,
+			logger,
+			config.Web,
 			latest,
 		)
 	})
@@ -113,7 +133,7 @@ func startScraping(
 ) error {
 	const prefix = "scraping"
 
-	logger.Printf("%s: started...", prefix)
+	logger.Printf("%s: starting...", prefix)
 	defer logger.Printf("%s: stopped", prefix)
 
 	client := &http.Client{Timeout: config.Timeout * time.Second}
@@ -132,6 +152,7 @@ func startScraping(
 			return
 		}
 
+		fmt.Println(u)
 		scraped <- u
 	}
 
@@ -163,7 +184,7 @@ func processScrapedData(
 ) error {
 	const prefix = "processing scraped data"
 
-	logger.Printf("%s: started...\n", prefix)
+	logger.Printf("%s: starting...\n", prefix)
 	defer logger.Printf("%s: stopped\n", prefix)
 
 	store, cancel := influx.NewStore(config)
@@ -200,4 +221,60 @@ func processScrapedData(
 // with context and returning and error.
 type Adder interface {
 	Add(...*gym.Utilization)
+}
+
+func launchWebServer(
+	ctx context.Context,
+	logger *log.Logger,
+	config Web,
+	latest web.RecentGetter,
+) error {
+	const prefix = "web server"
+
+	logger.Printf("%s: starting at port %d...\n", prefix, config.Port)
+	defer logger.Printf("%s: stopped\n", prefix)
+
+	w := web.Web{Recent: latest}
+
+	http.Handle("/popularity.html", httpdeco.Decorate(
+		w.Handler(),
+		httpdeco.WithLogs(logger),
+	))
+
+	http.Handle("/style.css", httpdeco.Decorate(
+		web.StyleHandler(),
+		httpdeco.WithLogs(logger),
+	))
+
+	http.Handle("/", httpdeco.Decorate(
+		http.NotFoundHandler(),
+		httpdeco.WithLogs(logger),
+	))
+
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", config.Port),
+		ReadTimeout:  config.ReadTimeout,
+		WriteTimeout: config.WriteTimeout,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			config.ShutdownTimeout,
+		)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Printf("shutting down server: %+v", err)
+		}
+	}()
+
+	err := server.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("listen: %s\n", err)
+	}
+
+	return nil
 }

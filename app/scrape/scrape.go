@@ -15,8 +15,8 @@ import (
 
 type Config struct {
 	URL     string        `required:"true"`
-	GymName string        `default:"sputnik" split_words:"true"`
-	GymID   int           `default:"121" split_words:"true"`
+	GymName string        `required:"true" split_words:"true"`
+	GymID   int           `required:"true" split_words:"true"`
 	Period  time.Duration `default:"10m"`
 	Timeout time.Duration `default:"10s"`
 }

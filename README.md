@@ -25,6 +25,8 @@ Some environment variables are required to run the project:
 | SPUTNIK\_INFLUXDB\_TOKEN\_WRITE | your InfluxDB write token |
 | SPUTNIK\_INFLUXDB\_TOKEN\_READ | your InfluxDB read token |
 | SPUTNIK\_SCRAPE\_URL | the URL to fetch the gym's current capacity utilization |
+| SPUTNIK\_SCRAPE\_GYM\_NAME | the gym name to pass to the scrape URL |
+| SPUTNIK\_SCRAPE\_GYM\_ID | the gym ID to pass to the scrape URL |
 
 Once this environment variables have been set
 you can run the project locally with:
