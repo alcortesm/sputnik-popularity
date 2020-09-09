@@ -27,6 +27,7 @@ type Config struct {
 	Scrape          scrape.Config
 	RecentRetention time.Duration `default:"168h" split_words:"true"`
 	Web             Web
+	RefreshPeriod   time.Duration `default:"1h" split_words:"true"`
 }
 
 type Web struct {
@@ -52,12 +53,18 @@ func main() {
 		logger.Fatalf("failed to start app: creating a recent.Cache: %v", err)
 	}
 
+	store, cancel := influx.NewStore(config.InfluxDB)
+	defer cancel()
+
 	signalCtx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	scrapedData := make(chan *gym.Utilization)
 	scrapeTicker := time.NewTicker(config.Scrape.Period)
 	defer scrapeTicker.Stop()
+
+	refreshTicker := time.NewTicker(config.RefreshPeriod)
+	defer refreshTicker.Stop()
 
 	g, ctx := errgroup.WithContext(signalCtx)
 
@@ -77,7 +84,7 @@ func main() {
 		return processScrapedData(
 			ctx,
 			logger,
-			config.InfluxDB,
+			store,
 			scrapedData,
 			latest,
 		)
@@ -93,6 +100,16 @@ func main() {
 		)
 	})
 
+	g.Go(func() error {
+		return refreshRecentWithDB(
+			ctx,
+			logger,
+			config.RecentRetention,
+			latest,
+			store,
+			refreshTicker.C,
+		)
+	})
 	logger.Println("starting app...")
 
 	if err := g.Wait(); err != nil {
@@ -152,7 +169,6 @@ func startScraping(
 			return
 		}
 
-		fmt.Println(u)
 		scraped <- u
 	}
 
@@ -178,7 +194,7 @@ func startScraping(
 func processScrapedData(
 	ctx context.Context,
 	logger *log.Logger,
-	config influx.Config,
+	store *influx.Store,
 	scraped <-chan *gym.Utilization,
 	latest Adder,
 ) error {
@@ -186,9 +202,6 @@ func processScrapedData(
 
 	logger.Printf("%s: starting...\n", prefix)
 	defer logger.Printf("%s: stopped\n", prefix)
-
-	store, cancel := influx.NewStore(config)
-	defer cancel()
 
 	do := func(u *gym.Utilization) {
 		go func() {
@@ -274,6 +287,48 @@ func launchWebServer(
 	err := server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("listen: %s\n", err)
+	}
+
+	return nil
+}
+
+func refreshRecentWithDB(
+	ctx context.Context,
+	logger *log.Logger,
+	retention time.Duration,
+	latest Adder,
+	store *influx.Store,
+	trigger <-chan time.Time,
+) error {
+	const prefix = "recent refresher"
+
+	logger.Printf("%s: starting...\n", prefix)
+	defer logger.Printf("%s: stopped\n", prefix)
+
+	do := func() {
+		data, err := store.Get(ctx, time.Now().Add(-retention))
+		if err != nil {
+			logger.Printf("%s: getting data: %v\n", prefix, err)
+			return
+		}
+
+		latest.Add(data...)
+	}
+
+	do()
+
+	for {
+		// wait for a trigger or a cancelation of the context
+		select {
+		case _, ok := <-trigger:
+			if !ok {
+				return fmt.Errorf("%s: closed trigger channel", prefix)
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("%s: %w", prefix, ctx.Err())
+		}
+
+		do()
 	}
 
 	return nil
