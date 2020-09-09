@@ -1,0 +1,33 @@
+version: "3.6"
+services:
+
+  influxdb:
+    image: quay.io/influxdb/influxdb:2.0.0-beta
+
+  scrapeme:
+    build:
+      context: ../.
+      target: run_scrapeme
+    ports:
+      - 8080
+    environment:
+      - SCRAPEME_PORT=8080
+      - SCRAPEME_CAPACITY=20
+
+  sputnik-popularity:
+    build:
+      context: ../.
+      target: run_app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - influxdb
+    environment:
+      - SPUTNIK_INFLUXDB_URL=http://influxdb:9999
+      - SPUTNIK_INFLUXDB_TOKEN_WRITE=write_token
+      - SPUTNIK_INFLUXDB_TOKEN_READ=read_token
+      - SPUTNIK_SCRAPE_URL=http://scrapeme:8080/popularity
+      - SPUTNIK_SCRAPE_GYM_NAME=sputnik
+      - SPUTNIK_SCRAPE_GYM_ID=121
+      - SPUTNIK_SCRAPE_PERIOD=1s
+      - SPUTNIK_RECENT_RETENTION=40s

@@ -19,14 +19,14 @@ services:
       - influxdb
       - scrapeme
     environment:
-      - SPUTNIK_POPULARITY_INFLUXDB_URL=http://influxdb:9999
-      - SPUTNIK_POPULARITY_INFLUXDB_TOKEN_WRITE=e2e_write_token
-      - SPUTNIK_POPULARITY_INFLUXDB_TOKEN_READ=e2e_read_token
-      - SPUTNIK_POPULARITY_INFLUXDB_ORG=e2e_org
-      - SPUTNIK_POPULARITY_INFLUXDB_BUCKET=e2e_bucket
-      - SPUTNIK_POPULARITY_SCRAPE_URL=http://scrapeme:8080/popularity
-      - SPUTNIK_POPULARITY_SCRAPE_GYM_NAME=e2e_gym_name
-      - SPUTNIK_POPULARITY_SCRAPE_GYM_ID=42
+      - SPUTNIK_INFLUXDB_URL=http://influxdb:9999
+      - SPUTNIK_INFLUXDB_TOKEN_WRITE=e2e_write_token
+      - SPUTNIK_INFLUXDB_TOKEN_READ=e2e_read_token
+      - SPUTNIK_INFLUXDB_ORG=e2e_org
+      - SPUTNIK_INFLUXDB_BUCKET=e2e_bucket
+      - SPUTNIK_SCRAPE_URL=http://scrapeme:8080/popularity
+      - SPUTNIK_SCRAPE_GYM_NAME=e2e_gym_name
+      - SPUTNIK_SCRAPE_GYM_ID=42
 
   tester:
     build:

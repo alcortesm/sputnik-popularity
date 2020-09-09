@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,7 +26,9 @@ const (
 )
 
 type config struct {
-	Port int
+	Port          int    `required:"true"`
+	Capacity      uint64 `required:"true"`
+	InitialPeople uint64 `default:"0" split_words:"true"`
 }
 
 func main() {
@@ -41,8 +45,14 @@ func main() {
 		logger.Fatalf("processign environment variables: %v", err)
 	}
 
+	web := &web{
+		logger:   logger,
+		people:   config.InitialPeople,
+		capacity: config.Capacity,
+	}
+
 	http.Handle("/popularity", httpdeco.Decorate(
-		http.HandlerFunc(popularityHandler),
+		web,
 		httpdeco.WithLogs(logger),
 	))
 
@@ -83,7 +93,33 @@ func main() {
 	}
 }
 
-func popularityHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	w.Write([]byte(`{"People": 42, "Capacity": 200}`))
+type web struct {
+	logger   *log.Logger
+	capacity uint64
+
+	mutex  sync.Mutex
+	people uint64
+}
+
+func (w *web) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	w.people = (w.people + 1) % w.capacity
+
+	rw.Header().Set("Content-type", "application/json")
+
+	payload := struct {
+		People   uint64
+		Capacity uint64
+	}{
+		People:   w.people,
+		Capacity: w.capacity,
+	}
+
+	err := json.NewEncoder(rw).Encode(payload)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
