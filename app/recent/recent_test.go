@@ -15,16 +15,12 @@ func TestCache(t *testing.T) {
 	t.Parallel()
 
 	subtests := map[string]func(t *testing.T){
-		"retention must be more than zero":     invalidRetention,
-		"can get from empty cache":             canGetFromEmpty,
-		"keeps recent values in a batch":       keepsRecentInBatch,
-		"adding unsorted values is ok":         canAddUnsorted,
-		"adding zero elements is ok":           canAddZeroElements,
-		"forgets old values in the same batch": forgetsOldInSameBatch,
-		"forgets values in old batches":        forgetsOldInOtherBatches,
-		"adding old values is ok":              canAddOldValues,
-		"ignores repeated values on add":       ignoreRepeatedAdd,
-		"ignores repeated values on forget":    ignoreRepeatedForget,
+		"retention must be more than zero": invalidRetention,
+		"can get from empty cache":         canGetFromEmpty,
+		"remembers recent values":          remembersRecentValues,
+		"forgets old values":               forgetsOldValues,
+		"overwrites values":                overwritesValues,
+		"all mixed together":               allMixed,
 	}
 
 	for name, fn := range subtests {
@@ -64,230 +60,329 @@ func canGetFromEmpty(t *testing.T) {
 	}
 }
 
-func keepsRecentInBatch(t *testing.T) {
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
+func remembersRecentValues(t *testing.T) {
+	u1 := fixValue(t, 1)
+	u2 := fixValue(t, 2)
+	u3 := fixValue(t, 3)
 
-	batch := []*gym.Utilization{u1, u2}
-	retention := 1 * time.Second // the whole batch
+	retention := 2 * time.Second // enough to remember all data points
 
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
+	subtests := []struct {
+		name    string
+		batches [][]*gym.Utilization
+		want    []*gym.Utilization
+	}{
+		{
+			name:    "add nothing",
+			batches: nil,
+			want:    []*gym.Utilization{},
+		}, {
+			name:    "add empty batch",
+			batches: [][]*gym.Utilization{{}},
+			want:    []*gym.Utilization{},
+		}, {
+			name:    "add empty batches",
+			batches: [][]*gym.Utilization{{}, {}, {}},
+			want:    []*gym.Utilization{},
+		}, {
+			name:    "one batch with one value",
+			batches: [][]*gym.Utilization{{u1}},
+			want:    []*gym.Utilization{u1},
+		}, {
+			name:    "one batch with three values",
+			batches: [][]*gym.Utilization{{u1, u2, u3}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		}, {
+			name:    "one batch with three values, unsorted",
+			batches: [][]*gym.Utilization{{u3, u1, u2}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		}, {
+			name:    "three batches with one value each",
+			batches: [][]*gym.Utilization{{u1}, {u2}, {u3}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		}, {
+			name:    "three batches with one value each, unsorted",
+			batches: [][]*gym.Utilization{{u3}, {u1}, {u2}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		}, {
+			name:    "batches of different sizes",
+			batches: [][]*gym.Utilization{{u1, u2}, {u3}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		}, {
+			name:    "batches of different sizes, unsorted",
+			batches: [][]*gym.Utilization{{u3, u1}, {u2}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		}, {
+			name:    "repeated batches with one value",
+			batches: [][]*gym.Utilization{{u1}, {u1}},
+			want:    []*gym.Utilization{u1},
+		}, {
+			name:    "repeated batches with two values",
+			batches: [][]*gym.Utilization{{u1, u2}, {u1, u2}},
+			want:    []*gym.Utilization{u1, u2},
+		}, {
+			name:    "repeated batches with two values unsorted",
+			batches: [][]*gym.Utilization{{u1, u2}, {u2, u1}},
+			want:    []*gym.Utilization{u1, u2},
+		}, {
+			name:    "batches mixing unique and repeated values",
+			batches: [][]*gym.Utilization{{u1, u3}, {u2, u1}, {u3, u2}},
+			want:    []*gym.Utilization{u1, u2, u3},
+		},
 	}
 
-	cache.Add(batch...)
+	for _, test := range subtests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	got := cache.Get()
-	want := batch
+			cache, err := recent.NewCache(retention)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
+			for _, b := range test.batches {
+				cache.Add(b...)
+			}
+
+			got := cache.Get()
+
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("(-want +got)\n%s", diff)
+			}
+		})
 	}
 }
 
-// fixDataPoint returns a gym.Utilization data point
-// with some fixed values useful in tests: timestamp will be n seconds,
-// capacity 100 + n and people will be n.
-func fixDataPoint(t *testing.T, n int) *gym.Utilization {
+// fixValue returns a gym.Utilization data point
+// with some fixed values useful in tests:
+// - timestamp will be year 2020 plus n seconds
+// - capacity 100 + n
+// - people will be n.
+func fixValue(t *testing.T, n int) *gym.Utilization {
 	t.Helper()
 
 	if n < 1 {
 		t.Fatalf("fixDataPoint arg must be greater than 0, was %d", n)
 	}
 
+	year2020 := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+
 	return &gym.Utilization{
-		Timestamp: time.Time{}.Add(time.Duration(n) * time.Second),
+		Timestamp: year2020.Add(time.Duration(n) * time.Second),
 		Capacity:  uint64(100 + n),
 		People:    uint64(n),
 	}
 }
 
-func canAddUnsorted(t *testing.T) {
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-	u3 := fixDataPoint(t, 3)
+func forgetsOldValues(t *testing.T) {
+	u1 := fixValue(t, 1)
+	u2 := fixValue(t, 2)
+	u3 := fixValue(t, 3)
+	u4 := fixValue(t, 4)
+	u5 := fixValue(t, 5)
 
-	batch := []*gym.Utilization{u2, u3, u1} // unsorted
-	retention := 2 * time.Second            // the whole batch
-
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Add(batch...)
-
-	got := cache.Get()
-	want := []*gym.Utilization{u1, u2, u3} // sorted
-
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func canAddZeroElements(t *testing.T) {
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-
-	batch := []*gym.Utilization{u1, u2}
-	retention := 1 * time.Second // the whole batch
-
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Add(batch...)
-	cache.Add() // add zero elements
-
-	got := cache.Get()
-	want := batch
-
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func forgetsOldInSameBatch(t *testing.T) {
-	// u1 and u2 will be forgotten due to an small retention period
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-	u3 := fixDataPoint(t, 3)
-	u4 := fixDataPoint(t, 4)
-
-	batch := []*gym.Utilization{u1, u2, u3, u4}
-	retention := 1 * time.Second // only half of the batch
-
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Add(batch...)
-
-	got := cache.Get()
-	want := []*gym.Utilization{u3, u4}
-
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func forgetsOldInOtherBatches(t *testing.T) {
-	// u1 and u2 will be forgotten due to a small retention period
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-	u3 := fixDataPoint(t, 3)
-	u4 := fixDataPoint(t, 4)
-	u5 := fixDataPoint(t, 5)
-	u6 := fixDataPoint(t, 6)
-
-	oldBatch := []*gym.Utilization{u1, u2, u3, u4}
-	newBatch := []*gym.Utilization{u5, u6}
-
-	// enough to remember the whole first batch and then forget the
-	// first two data points when the second batch arraives.
-	retention := 3 * time.Second
-
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Add(oldBatch...)
-	cache.Add(newBatch...)
-
-	got := cache.Get()
-	want := []*gym.Utilization{u3, u4, u5, u6}
-
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func canAddOldValues(t *testing.T) {
-	// u1 and u2 will be forgotten due to a small retention period
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-	u3 := fixDataPoint(t, 3)
-	u4 := fixDataPoint(t, 4)
-
-	oldBatch := []*gym.Utilization{u2, u4}
-	newBatch := []*gym.Utilization{u1, u3}
-
-	// enough to remember everything
-	retention := 3 * time.Second
-
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Add(oldBatch...)
-	cache.Add(newBatch...)
-
-	got := cache.Get()
-	want := []*gym.Utilization{u1, u2, u3, u4}
-
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func ignoreRepeatedAdd(t *testing.T) {
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-	u3 := fixDataPoint(t, 3)
-	u4 := fixDataPoint(t, 4)
-
-	oldBatch := []*gym.Utilization{u1, u2, u4}
-	newBatch := []*gym.Utilization{u2, u3, u4}
-
-	// enough to remember everything added
-	retention := 3 * time.Second
-
-	cache, err := recent.NewCache(retention)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cache.Add(oldBatch...)
-	cache.Add(newBatch...)
-
-	got := cache.Get()
-	want := []*gym.Utilization{u1, u2, u3, u4}
-
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(-want +got)\n%s", diff)
-	}
-}
-
-func ignoreRepeatedForget(t *testing.T) {
-	// u1 and u2 will be forgotten due to a small retention period
-	u1 := fixDataPoint(t, 1)
-	u2 := fixDataPoint(t, 2)
-	u3 := fixDataPoint(t, 3)
-	u4 := fixDataPoint(t, 4)
-	u5 := fixDataPoint(t, 5)
-
-	oldBatch := []*gym.Utilization{u1, u2, u3, u4}
-	newBatch := []*gym.Utilization{u1, u3, u5}
-
-	// enough to remember the first batch, then forget u1 and u2 when
-	// the second batch arrives.
+	// remember up to 3 one-second apart values
 	retention := 2 * time.Second
 
+	subtests := []struct {
+		name    string
+		batches [][]*gym.Utilization
+		want    []*gym.Utilization
+	}{
+		{
+			name:    "one batch",
+			batches: [][]*gym.Utilization{{u1, u2, u3, u4, u5}},
+			want:    []*gym.Utilization{u3, u4, u5},
+		}, {
+			name:    "two batches",
+			batches: [][]*gym.Utilization{{u1}, {u2, u3, u4, u5}},
+			want:    []*gym.Utilization{u3, u4, u5},
+		}, {
+			name:    "old values in second batch",
+			batches: [][]*gym.Utilization{{u5}, {u1, u2}},
+			want:    []*gym.Utilization{u5},
+		}, {
+			name:    "two batches, two forgets",
+			batches: [][]*gym.Utilization{{u1, u4}, {u2, u3, u4, u5}},
+			want:    []*gym.Utilization{u3, u4, u5},
+		}, {
+			name:    "two batches, interleaved",
+			batches: [][]*gym.Utilization{{u1, u3}, {u2, u4, u5}},
+			want:    []*gym.Utilization{u3, u4, u5},
+		}, {
+			name:    "two batches, interleaved, unsorted",
+			batches: [][]*gym.Utilization{{u3, u1}, {u4, u5, u2}},
+			want:    []*gym.Utilization{u3, u4, u5},
+		}, {
+			name:    "two batches, interleaved, unsorted, repeated",
+			batches: [][]*gym.Utilization{{u3, u2, u1}, {u3, u4, u5, u2}},
+			want:    []*gym.Utilization{u3, u4, u5},
+		},
+	}
+
+	for _, test := range subtests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cache, err := recent.NewCache(retention)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, b := range test.batches {
+				cache.Add(b...)
+			}
+
+			got := cache.Get()
+
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("(-want +got)\n%s", diff)
+			}
+		})
+	}
+}
+
+func overwritesValues(t *testing.T) {
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	u1 := fixValue(t, 1)
+	u2 := fixValue(t, 2)
+
+	// a, b and c all have the same timestamp, but different values:
+	// - b and c has different capacity (42) than a (101)
+	// - c has different timezone (New York) than a and b (UTC)
+	var u3a, u3b, u3c *gym.Utilization
+	{
+		u3a = fixValue(t, 3)
+
+		u3b = fixValue(t, 3)
+		u3b.Capacity = 42
+
+		u3c = fixValue(t, 3)
+		u3c.Capacity = 42
+		u3c.Timestamp = u3a.Timestamp.In(newYork)
+	}
+
+	// remembers up to 2 one-second apart values
+	retention := 1 * time.Second
+
+	subtests := []struct {
+		name    string
+		batches [][]*gym.Utilization
+		want    []*gym.Utilization
+	}{
+		{
+			name:    "one batch, one value",
+			batches: [][]*gym.Utilization{{u3a, u3b}},
+			want:    []*gym.Utilization{u3b},
+		}, {
+			name:    "one batch, one value, different timezones",
+			batches: [][]*gym.Utilization{{u3a, u3c}},
+			want:    []*gym.Utilization{u3c},
+		}, {
+			name:    "same batch",
+			batches: [][]*gym.Utilization{{u2, u3a, u3b}},
+			want:    []*gym.Utilization{u2, u3b},
+		}, {
+			name:    "same batch, different timezone",
+			batches: [][]*gym.Utilization{{u2, u3a, u3c}},
+			want:    []*gym.Utilization{u2, u3c},
+		}, {
+			name:    "different batches",
+			batches: [][]*gym.Utilization{{u2, u3a}, {u3b}},
+			want:    []*gym.Utilization{u2, u3b},
+		}, {
+			name:    "different batches, different timezone",
+			batches: [][]*gym.Utilization{{u2, u3a}, {u3c}},
+			want:    []*gym.Utilization{u2, u3c},
+		}, {
+			name:    "same batch, forgets",
+			batches: [][]*gym.Utilization{{u1, u2, u3a, u3b}},
+			want:    []*gym.Utilization{u2, u3b},
+		}, {
+			name:    "same batch, different timezone, forgets",
+			batches: [][]*gym.Utilization{{u1, u2, u3a, u3c}},
+			want:    []*gym.Utilization{u2, u3c},
+		}, {
+			name:    "different batches, forgets",
+			batches: [][]*gym.Utilization{{u1, u2, u3a}, {u3b}},
+			want:    []*gym.Utilization{u2, u3b},
+		}, {
+			name:    "different batches, different timezone, forgets",
+			batches: [][]*gym.Utilization{{u1, u2, u3a}, {u3c}},
+			want:    []*gym.Utilization{u2, u3c},
+		},
+	}
+
+	for _, test := range subtests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cache, err := recent.NewCache(retention)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, b := range test.batches {
+				cache.Add(b...)
+			}
+
+			got := cache.Get()
+
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("(-want +got)\n%s", diff)
+			}
+		})
+	}
+}
+
+func allMixed(t *testing.T) {
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	u1 := fixValue(t, 1)
+	u2 := fixValue(t, 2)
+	u3 := fixValue(t, 3)
+	u4 := fixValue(t, 4)
+	u4b := fixValue(t, 4)
+	u4b.Capacity = 42
+	u5 := fixValue(t, 5)
+	u6 := fixValue(t, 6)
+	u6b := fixValue(t, 6)
+	u6b.Timestamp = u6b.Timestamp.In(newYork)
+	u6b.Capacity = 42
+
+	batches := [][]*gym.Utilization{
+		{u1, u5, u1, u2},
+		{u3, u5, u1, u4, u4, u2},
+		{u4b, u1, u6, u3},
+		{u6b},
+		{u1, u1},
+	}
+
+	// remember up to 3 one-second values
+	retention := 2 * time.Second
+
+	want := []*gym.Utilization{u4b, u5, u6b}
+
 	cache, err := recent.NewCache(retention)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cache.Add(oldBatch...)
-	cache.Add(newBatch...)
+	for _, b := range batches {
+		cache.Add(b...)
+	}
 
 	got := cache.Get()
-	want := []*gym.Utilization{u3, u4, u5}
 
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("(-want +got)\n%s", diff)
