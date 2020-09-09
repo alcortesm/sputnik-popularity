@@ -68,6 +68,9 @@ name@instance ~ $  docker run \
     --env SPUTNIK_INFLUXDB_TOKEN_WRITE="..." \
     --env SPUTNIK_INFLUXDB_TOKEN_READ="..." \
     --env SPUTNIK_SCRAPE_URL="..." \
+    --env SPUTNIK_SCRAPE_GYM_NAME="..." \
+    --env SPUTNIK_SCRAPE_GYM_ID="..." \
+    --publish 8080:8080 \
     --log-driver=gcplogs \
     gcr.io/$PROJECT_ID/sputnik_popularity
 ```
