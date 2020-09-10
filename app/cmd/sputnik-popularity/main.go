@@ -250,12 +250,17 @@ func launchWebServer(
 	w := web.Web{Recent: latest}
 
 	http.Handle("/popularity.html", httpdeco.Decorate(
-		w.Handler(),
+		w.PopularityHandler(),
+		httpdeco.WithLogs(logger),
+	))
+
+	http.Handle("/chart.js", httpdeco.Decorate(
+		w.ChartHandler(),
 		httpdeco.WithLogs(logger),
 	))
 
 	http.Handle("/style.css", httpdeco.Decorate(
-		web.StyleHandler(),
+		w.StyleHandler(),
 		httpdeco.WithLogs(logger),
 	))
 
