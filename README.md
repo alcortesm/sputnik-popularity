@@ -40,7 +40,7 @@ you can run the project locally with:
 First build a docker image of the project:
 
 ```
-; make docker_image
+; make docker-image
 [...]
 Successfully tagged sputnik:latest
 ```

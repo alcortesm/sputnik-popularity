@@ -1,10 +1,10 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/alcortesm/sputnik-popularity/app/gym"
@@ -48,34 +48,67 @@ func (w Web) ChartHandler() http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-type", "application/javascript")
 
-		data := w.Recent.Get()
+		dataRaw := w.Recent.Get()
+		dataJSON, err := dataToJSON(dataRaw)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-		if err := tmpl.Execute(rw, format(data)); err != nil {
+		if err := tmpl.Execute(rw, dataJSON); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	})
 }
 
-type formatted struct {
-	People template.HTML
-}
-
-func format(data []*gym.Utilization) formatted {
-	var people strings.Builder
-
-	people.WriteString("[")
-
-	sep := ""
-	for _, d := range data {
-		fmt.Fprintf(&people, `%s{t: %q, y: %d}`,
-			sep, d.Timestamp.Format(time.RFC3339), d.People)
-		sep = ", "
+func dataToJSON(data []*gym.Utilization) (template.HTML, error) {
+	type pairInt struct {
+		Timestamp time.Time `json:"t"`
+		Value     uint64    `json:"y"`
 	}
 
-	people.WriteString("]")
-
-	return formatted{
-		People: template.HTML(people.String()),
+	type pairFloat struct {
+		Timestamp time.Time `json:"t"`
+		Value     float64   `json:"y"`
 	}
+
+	payload := struct {
+		People   []pairInt
+		Capacity []pairInt
+		Percent  []pairFloat
+	}{
+		People:   make([]pairInt, len(data)),
+		Capacity: make([]pairInt, len(data)),
+		Percent:  make([]pairFloat, len(data)),
+	}
+
+	for i, d := range data {
+		payload.People[i] = pairInt{
+			Timestamp: d.Timestamp,
+			Value:     d.People,
+		}
+
+		payload.Capacity[i] = pairInt{
+			Timestamp: d.Timestamp,
+			Value:     d.Capacity,
+		}
+
+		p, ok := d.Percent()
+		if !ok {
+			p = 0.0
+		}
+
+		payload.Percent[i] = pairFloat{
+			Timestamp: d.Timestamp,
+			Value:     p,
+		}
+	}
+
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("generating JSON from data: %v", err)
+	}
+
+	return template.HTML(b), nil
 }
