@@ -13,17 +13,35 @@ canvas {
 
 const chartTemplate = `var ctx = document.getElementById('chart').getContext('2d');
 
-const data = {{.People}};
+const dataJSON = ` + "`{{.}}`;" + `
+const data = JSON.parse(dataJSON)
 
 var chart = new Chart(ctx, {
     type: 'line',
     data: {
         datasets: [{
             label: 'People',
-            data: data,
+            yAxisID: 'people',
+            data: data.People,
             backgroundColor: '#36a8e1',
+            borderColor: 'darkblue'
+        },
+        {
+            label: 'Capacity',
+            yAxisID: 'people',
+            data: data.Capacity,
+            backgroundColor: 'red',
+            borderColor: 'red',
+            fill: false
+        },
+        {
+            label: 'Percent',
+            yAxisID: 'percent',
+            data: data.Percent,
+			hidden: true,
+            backgroundColor: 'black',
             borderColor: 'black',
-            yAxisID: 'people'
+            fill: false
         }]
     },
     options: {
@@ -47,17 +65,25 @@ var chart = new Chart(ctx, {
             yAxes: [{
                 id: 'people',
                 position: 'left',
+                ticks: {
+                    min: 0,
+                    max: 250
+                },
                 scaleLabel: {
                     display: true,
-                    labelString: 'people'
+                    labelString: '# of people'
                 }
             },
             {
                 id: 'percent',
                 position: 'right',
+                ticks: {
+                    min: 0,
+                    max: 120
+                },
                 scaleLabel: {
                     display: true,
-                    labelString: 'percent'
+                    labelString: 'Percent of capacity'
                 }
             }]
         },
