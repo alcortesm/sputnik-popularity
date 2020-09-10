@@ -1,7 +1,6 @@
 package web
 
-const css = `
-h1 {
+const css = `h1 {
   color: #36a8e1;
   text-align: center;
 }
@@ -17,7 +16,29 @@ canvas {
   height:auto;
 }`
 
-const popularityTemplate = `<!DOCTYPE html>
+const chartTemplate = `var ctx = document.getElementById('chart').getContext('2d');
+
+const data = {{.People}};
+
+var chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    datasets: [{
+      label: 'People',
+      data: data
+    }]
+  },
+  options: {
+    scales: {
+      xAxes: [{
+        type: 'time'
+      }]
+    }
+  }
+});
+`
+
+const popularity = `<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -34,30 +55,10 @@ const popularityTemplate = `<!DOCTYPE html>
     <canvas id="chart"></canvas>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.js"></script>
-  <script>
-    var ctx = document.getElementById('chart').getContext('2d');
-
-    const data = [ {{.People}} ];
-
-    var chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        datasets: [{
-          label: 'People',
-          data: data
-        }]
-      },
-      options: {
-        scales: {
-          xAxes: [{
-            type: 'time'
-          }]
-        }
-      }
-    });
-  </script>
 </body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.js"></script>
+<script src="./chart.js"></script>
 
 </html>`
 
