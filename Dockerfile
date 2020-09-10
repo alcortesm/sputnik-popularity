@@ -11,7 +11,7 @@ WORKDIR ${src}
 
 ####
 # Creates a Docker image with the static binary to run the app.
-FROM src as build_app
+FROM src AS build-app
 
 RUN CGO_ENABLED=0 go build \
     -o /bin/build \
@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 go build \
 
 ####
 # Creates a Docker image with the scrapme helper binary for the e2e tests.
-FROM src as build_scrapeme
+FROM src AS build-scrapeme
 
 RUN CGO_ENABLED=0 go build \
     -o /bin/build \
@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 go build \
 ####
 # Creates an empty image with certs and other things required
 # to run Go static binaries.
-FROM scratch as withCerts
+FROM scratch AS with-certs
 
 COPY --from=src \
     /etc/ssl/certs/ca-certificates.crt \
@@ -39,15 +39,15 @@ COPY --from=src \
 
 ####
 # Creates a single layer image to run the app.
-FROM withCerts as run_app
+FROM with-certs AS run-app
 
-COPY --from=build_app /bin/build /bin/runme
+COPY --from=build-app /bin/build /bin/runme
 ENTRYPOINT ["/bin/runme"]
 
 ####
 # Creates a single layer image to run the scrapeme helper for the e2e
 # tests.
-FROM scratch as run_scrapeme
+FROM scratch AS run-scrapeme
 
-COPY --from=build_scrapeme /bin/build /bin/runme
+COPY --from=build-scrapeme /bin/build /bin/runme
 ENTRYPOINT ["/bin/runme"]

@@ -13,15 +13,15 @@ unit:
 	go test ./... -cover -race
 
 .PHONY: clean
-clean: integration_clean e2e_clean
+clean: integration-clean e2e-clean
 
 .PHONY: integration
-integration: integration_test integration_clean
+integration: integration-test integration-clean
 
-integration_test: dir := tests/integration
-integration_test: project := integration
-integration_test: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
-integration_test:
+integration-test: dir := tests/integration
+integration-test: project := integration
+integration-test: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
+integration-test:
 	docker-compose $(dc-flags) build
 	docker-compose $(dc-flags) up \
 		--force-recreate \
@@ -35,21 +35,21 @@ integration_test:
 		fi
 	docker-compose $(dc-flags) logs tester
 
-.PHONY: integration_clean
-integration_clean: dir := tests/integration
-integration_clean: project := integration
-integration_clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
-integration_clean:
+.PHONY: integration-clean
+integration-clean: dir := tests/integration
+integration-clean: project := integration
+integration-clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
+integration-clean:
 	docker-compose $(dc-flags) rm -v --stop --force
 
 .PHONY: e2e
-e2e: e2e_test e2e_clean
+e2e: e2e-test e2e-clean
 
-.PHONY: e2e_test
-e2e_test: dir := tests/e2e
-e2e_test: project := e2e
-e2e_test: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
-e2e_test:
+.PHONY: e2e-test
+e2e-test: dir := tests/e2e
+e2e-test: project := e2e
+e2e-test: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
+e2e-test:
 	docker-compose $(dc-flags) build
 	docker-compose $(dc-flags) up \
 		--force-recreate \
@@ -63,13 +63,13 @@ e2e_test:
 		fi
 	docker-compose $(dc-flags) logs tester
 
-.PHONY: e2e_clean
-e2e_clean: dir := tests/e2e
-e2e_clean: project := e2e
-e2e_clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
-e2e_clean:
+.PHONY: e2e-clean
+e2e-clean: dir := tests/e2e
+e2e-clean: project := e2e
+e2e-clean: dc-flags := -p $(project) -f $(dir)/docker-compose.yml
+e2e-clean:
 	docker-compose $(dc-flags) rm -v --stop --force
 
-.PHONY: docker_image
-docker_image:
-	docker build -t sputnik --target=run_app .
+.PHONY: docker-image
+docker-image:
+	docker build -t sputnik --target=run-app .
