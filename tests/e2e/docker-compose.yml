@@ -7,14 +7,14 @@ services:
   scrapeme:
     build:
       context: ../..
-      target: run_scrapeme
+      target: run-scrapeme
     environment:
       - SCRAPEME_PORT=8080
 
   sputnik-popularity:
     build:
       context: ../..
-      target: run_app
+      target: run-app
     depends_on:
       - influxdb
       - scrapeme
@@ -31,7 +31,7 @@ services:
   tester:
     build:
       context: ../..
-      target: src
+      target: with-sources
     entrypoint: ["go", "test", "-tags", "e2e", "./tests/e2e/..."]
     depends_on:
       - influxdb

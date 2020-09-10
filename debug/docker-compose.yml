@@ -7,7 +7,7 @@ services:
   scrapeme:
     build:
       context: ../.
-      target: run_scrapeme
+      target: run-scrapeme
     ports:
       - 8080
     environment:
@@ -17,7 +17,7 @@ services:
   sputnik-popularity:
     build:
       context: ../.
-      target: run_app
+      target: run-app
     ports:
       - "8080:8080"
     depends_on:
