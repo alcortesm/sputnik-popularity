@@ -31,7 +31,7 @@ services:
   tester:
     build:
       context: ../..
-      target: src
+      target: with-sources
     entrypoint: ["go", "test", "-tags", "e2e", "./tests/e2e/..."]
     depends_on:
       - influxdb
