@@ -79,11 +79,14 @@ var chart = new Chart(ctx, {
                 position: 'right',
                 ticks: {
                     min: 0,
-                    max: 120
+                    max: 125
                 },
                 scaleLabel: {
                     display: true,
                     labelString: 'Percent of capacity'
+                },
+				gridLines: {
+                    drawOnChartArea: false // only want the grid lines for one axis to show up
                 }
             }]
         },
