@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -20,14 +21,12 @@ var tmpl = template.Must(
 		Parse(chartTemplate))
 
 type Web struct {
-	Recent RecentGetter
+	Recent Getter
 }
 
-// RecentGetter knows how to get the most recent gym utilization data.
-//
-// TODO: Get probably needs a context and an error.
-type RecentGetter interface {
-	Get() []*gym.Utilization
+// Getter knows how to get gym utilization data.
+type Getter interface {
+	Get(context.Context) ([]*gym.Utilization, error)
 }
 
 func (w Web) PopularityHandler() http.Handler {
@@ -48,15 +47,22 @@ func (w Web) ChartHandler() http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-type", "application/javascript")
 
-		dataRaw := w.Recent.Get()
+		dataRaw, err := w.Recent.Get(r.Context())
+		if err != nil {
+			msg := fmt.Sprintf("getting recent data: %v", err)
+			http.Error(rw, msg, http.StatusInternalServerError)
+		}
+
 		dataJSON, err := dataToJSON(dataRaw)
 		if err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			msg := fmt.Sprintf("marshaling data to JSON: %v", err)
+			http.Error(rw, msg, http.StatusInternalServerError)
 			return
 		}
 
 		if err := tmpl.Execute(rw, dataJSON); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			msg := fmt.Sprintf("executing template: %v", err)
+			http.Error(rw, msg, http.StatusInternalServerError)
 			return
 		}
 	})
