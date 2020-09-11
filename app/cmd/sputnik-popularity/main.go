@@ -23,18 +23,28 @@ import (
 )
 
 type Config struct {
-	InfluxDB        influx.Config
-	Scrape          scrape.Config
-	RecentRetention time.Duration `default:"168h" split_words:"true"`
-	Web             Web
-	RefreshPeriod   time.Duration `default:"1h" split_words:"true"`
+	// TODO: Influx and Scrape config should be defined here so the env
+	// is straighforward and to avoid env tags in inner packages.
+	InfluxDB influx.Config
+	Scrape   scrape.Config
+	Recent   RecentConfig
+	Web      WebConfig
+	Refresh  RefreshConfig
 }
 
-type Web struct {
+type RecentConfig struct {
+	Retention time.Duration `default:"168h" split_words:"true"` // 168h is 1 week
+}
+
+type WebConfig struct {
 	Port            int           `default:"8080"`
 	ReadTimeout     time.Duration `default:"10s"`
 	WriteTimeout    time.Duration `default:"10s"`
 	ShutdownTimeout time.Duration `default:"10s"`
+}
+
+type RefreshConfig struct {
+	Period time.Duration `default:"1h" split_words:"true"`
 }
 
 func main() {
@@ -48,23 +58,19 @@ func main() {
 		logger.Fatalf("failed to start app: processign env vars: %v", err)
 	}
 
-	latest, err := recent.NewCache(config.RecentRetention)
-	if err != nil {
-		logger.Fatalf("failed to start app: creating a recent.Cache: %v", err)
-	}
-
-	store, cancel := influx.NewStore(config.InfluxDB)
-	defer cancel()
-
 	signalCtx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	scrapedData := make(chan *gym.Utilization)
-	scrapeTicker := time.NewTicker(config.Scrape.Period)
-	defer scrapeTicker.Stop()
+	recentStore, err := recent.NewStore(config.Recent.Retention)
+	if err != nil {
+		logger.Fatalf("failed to start app: creating a recent store: %v", err)
+	}
 
-	refreshTicker := time.NewTicker(config.RefreshPeriod)
-	defer refreshTicker.Stop()
+	influxStore, cancel := influx.NewStore(config.InfluxDB)
+	defer cancel()
+
+	// channel where the scraper sends the scraped data
+	scrapedCh := make(chan *gym.Utilization)
 
 	g, ctx := errgroup.WithContext(signalCtx)
 
@@ -74,8 +80,8 @@ func main() {
 			ctx,
 			logger,
 			config.Scrape,
-			scrapeTicker.C,
-			scrapedData,
+			time.Tick(config.Scrape.Period),
+			scrapedCh,
 		)
 	})
 
@@ -84,9 +90,9 @@ func main() {
 		return processScrapedData(
 			ctx,
 			logger,
-			store,
-			scrapedData,
-			latest,
+			scrapedCh,
+			influxStore,
+			recentStore,
 		)
 	})
 
@@ -96,18 +102,19 @@ func main() {
 			ctx,
 			logger,
 			config.Web,
-			latest,
+			recentStore,
 		)
 	})
 
+	// refresh the recent from the DB regularly
 	g.Go(func() error {
 		return refreshRecentWithDB(
 			ctx,
 			logger,
-			config.RecentRetention,
-			latest,
-			store,
-			refreshTicker.C,
+			config.Recent.Retention,
+			influxStore,
+			recentStore,
+			time.Tick(config.Refresh.Period),
 		)
 	})
 	logger.Println("starting app...")
@@ -194,9 +201,9 @@ func startScraping(
 func processScrapedData(
 	ctx context.Context,
 	logger *log.Logger,
-	store *influx.Store,
 	scraped <-chan *gym.Utilization,
-	latest Adder,
+	influxStore *influx.Store,
+	recentStore *recent.Store,
 ) error {
 	const prefix = "processing scraped data"
 
@@ -205,12 +212,18 @@ func processScrapedData(
 
 	do := func(u *gym.Utilization) {
 		go func() {
-			if err := store.Add(ctx, u); err != nil {
-				logger.Printf("%s: adding to store: %v\n", prefix, err)
+			if err := influxStore.Add(ctx, u); err != nil {
+				logger.Printf("%s: adding to influx store: %v\n",
+					prefix, err)
 			}
 		}()
 
-		go latest.Add(u)
+		go func() {
+			if err := recentStore.Add(ctx, u); err != nil {
+				logger.Printf("%s: adding to recent store: %v\n",
+					prefix, err)
+			}
+		}()
 	}
 
 	for {
@@ -227,20 +240,11 @@ func processScrapedData(
 	}
 }
 
-// Adder know how to store gym Utilization data, for example, a
-// recent.Cache.
-//
-// TODO: this should really be like the influx.Store.Add method instead,
-// with context and returning and error.
-type Adder interface {
-	Add(...*gym.Utilization)
-}
-
 func launchWebServer(
 	ctx context.Context,
 	logger *log.Logger,
-	config Web,
-	latest web.RecentGetter,
+	config WebConfig,
+	latest web.Getter,
 ) error {
 	const prefix = "web server"
 
@@ -301,8 +305,8 @@ func refreshRecentWithDB(
 	ctx context.Context,
 	logger *log.Logger,
 	retention time.Duration,
-	latest Adder,
-	store *influx.Store,
+	store getSincer,
+	recentStore *recent.Store,
 	trigger <-chan time.Time,
 ) error {
 	const prefix = "recent refresher"
@@ -311,13 +315,18 @@ func refreshRecentWithDB(
 	defer logger.Printf("%s: stopped\n", prefix)
 
 	do := func() {
-		data, err := store.Get(ctx, time.Now().Add(-retention))
+		since := time.Now().Add(-retention)
+
+		data, err := store.Get(ctx, since)
 		if err != nil {
-			logger.Printf("%s: getting data: %v\n", prefix, err)
+			logger.Printf("%s: getting data from influx: %v\n", prefix, err)
 			return
 		}
 
-		latest.Add(data...)
+		if err := recentStore.Add(ctx, data...); err != nil {
+			logger.Printf("%s: adding data to recent: %v\n", prefix, err)
+			return
+		}
 	}
 
 	do()
@@ -337,4 +346,10 @@ func refreshRecentWithDB(
 	}
 
 	return nil
+}
+
+// getSincer knows how to retrieve gym utilization data since a certain
+// date. See influx.Store for example.
+type getSincer interface {
+	Get(context.Context, time.Time) ([]*gym.Utilization, error)
 }

@@ -1,6 +1,7 @@
 package recent_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -11,12 +12,12 @@ import (
 	"github.com/alcortesm/sputnik-popularity/app/recent"
 )
 
-func TestCache(t *testing.T) {
+func TestStore(t *testing.T) {
 	t.Parallel()
 
 	subtests := map[string]func(t *testing.T){
 		"retention must be more than zero": invalidRetention,
-		"can get from empty cache":         canGetFromEmpty,
+		"can get from empty store":         canGetFromEmpty,
 		"remembers recent values":          remembersRecentValues,
 		"forgets old values":               forgetsOldValues,
 		"overwrites values":                overwritesValues,
@@ -37,7 +38,7 @@ func invalidRetention(t *testing.T) {
 		name := fmt.Sprintf("%d", retention)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := recent.NewCache(0)
+			_, err := recent.NewStore(0)
 			if err == nil {
 				t.Fatal("unexpected success")
 			}
@@ -48,12 +49,17 @@ func invalidRetention(t *testing.T) {
 func canGetFromEmpty(t *testing.T) {
 	retention := time.Second // irrelevant
 
-	cache, err := recent.NewCache(retention)
+	store, err := recent.NewStore(retention)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got := cache.Get()
+	ctx := context.Background() // irrelevant
+
+	got, err := store.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(got) != 0 {
 		t.Errorf("want empty slice, got %#v", got)
@@ -66,6 +72,7 @@ func remembersRecentValues(t *testing.T) {
 	u3 := fixValue(t, 3)
 
 	retention := 2 * time.Second // enough to remember all data points
+	ctx := context.Background()  // irrelevant
 
 	subtests := []struct {
 		name    string
@@ -136,16 +143,19 @@ func remembersRecentValues(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			cache, err := recent.NewCache(retention)
+			store, err := recent.NewStore(retention)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			for _, b := range test.batches {
-				cache.Add(b...)
+				store.Add(ctx, b...)
 			}
 
-			got := cache.Get()
+			got, err := store.Get(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("(-want +got)\n%s", diff)
@@ -184,6 +194,7 @@ func forgetsOldValues(t *testing.T) {
 
 	// remember up to 3 one-second apart values
 	retention := 2 * time.Second
+	ctx := context.Background() // irrelevant
 
 	subtests := []struct {
 		name    string
@@ -230,16 +241,19 @@ func forgetsOldValues(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			cache, err := recent.NewCache(retention)
+			store, err := recent.NewStore(retention)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			for _, b := range test.batches {
-				cache.Add(b...)
+				store.Add(ctx, b...)
 			}
 
-			got := cache.Get()
+			got, err := store.Get(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("(-want +got)\n%s", diff)
@@ -256,6 +270,8 @@ func overwritesValues(t *testing.T) {
 
 	u1 := fixValue(t, 1)
 	u2 := fixValue(t, 2)
+
+	ctx := context.Background() // irrelevant
 
 	// a, b and c all have the same timestamp, but different values:
 	// - b and c has different capacity (42) than a (101)
@@ -328,16 +344,19 @@ func overwritesValues(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			cache, err := recent.NewCache(retention)
+			store, err := recent.NewStore(retention)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			for _, b := range test.batches {
-				cache.Add(b...)
+				store.Add(ctx, b...)
 			}
 
-			got := cache.Get()
+			got, err := store.Get(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("(-want +got)\n%s", diff)
@@ -374,19 +393,23 @@ func allMixed(t *testing.T) {
 
 	// remember up to 3 one-second values
 	retention := 2 * time.Second
+	ctx := context.Background() // irrelevant
 
 	want := []*gym.Utilization{u4b, u5, u6b}
 
-	cache, err := recent.NewCache(retention)
+	store, err := recent.NewStore(retention)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, b := range batches {
-		cache.Add(b...)
+		store.Add(ctx, b...)
 	}
 
-	got := cache.Get()
+	got, err := store.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("(-want +got)\n%s", diff)

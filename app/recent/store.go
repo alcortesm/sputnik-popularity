@@ -1,9 +1,7 @@
 package recent
 
-// TODO: we need a better name for this package it is an excelent
-// variable name for a the Cache defined here.
-
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -12,42 +10,42 @@ import (
 	"github.com/alcortesm/sputnik-popularity/app/gym"
 )
 
-// Cache is a collection of gym.Utilization values sorted
+// Store is a collection of gym.Utilization values sorted
 // chronologically. You can add values in any order and they will be
 // sorted internally.
 //
-// Within the cache values should have unique timestamps; if you try
-// to add values with repeated timestamps, the old values will be
-// overwritten with the new ones.
+// The stored values should have unique timestamps; if you try to add
+// values with repeated timestamps, the old values will be overwritten
+// with the new ones.
 //
-// The cache will forget values older than the newest value minus a
+// The store will forget values older than the newest value minus a
 // certain retention period, so its contents are always "recent" with
 // respect of the newest value.
 //
-// Note: The cache doesn't care about when the values are added just
+// Note: The store doesn't care about when the values are added just
 // about their timestamps.
-type Cache struct {
+type Store struct {
 	retention time.Duration
 	mux       sync.Mutex
 	data      []*gym.Utilization
 }
 
-// NewCache returns a new cache with the give retention period.
-func NewCache(retention time.Duration) (*Cache, error) {
+// NewStore returns a new Store with the given retention period.
+func NewStore(retention time.Duration) (*Store, error) {
 	if retention == 0 {
 		return nil, fmt.Errorf("retention must be >0, was %v", retention)
 	}
 
-	return &Cache{retention: retention}, nil
+	return &Store{retention: retention}, nil
 }
 
-// Add adds values to the cache, overwriting previous values with the
+// Add adds values to the store, overwriting previous values with the
 // same timestamps as the ones being added. After adding these values,
-// all values in the cache older than its newest value minus the
+// all values in the store older than its newest value minus the
 // retention period will be forgotten.
-func (r *Cache) Add(data ...*gym.Utilization) {
+func (r *Store) Add(_ context.Context, data ...*gym.Utilization) error {
 	if len(data) == 0 {
-		return
+		return nil
 	}
 
 	r.mux.Lock()
@@ -64,12 +62,14 @@ func (r *Cache) Add(data ...*gym.Utilization) {
 
 	r.trim()
 	r.unique()
+
+	return nil
 }
 
 // Trim removes elements from r.data with a timestamp older than the
 // timestamp of the newest element minus retention.  It assumes the
 // elements are sorted chronologically and the mutex is locked.
-func (r *Cache) trim() {
+func (r *Store) trim() {
 	newest := r.data[len(r.data)-1]
 
 	// elements before threshold will be forgotten
@@ -84,10 +84,10 @@ func (r *Cache) trim() {
 	r.data = r.data[first:]
 }
 
-// Unique removes duplicated values from the cache, keeping the ones
+// Unique removes duplicated values from the store, keeping the ones
 // that show up later in the data. It assumes the data is sorted
 // chronologically and the mutex is locked.
-func (r *Cache) unique() {
+func (r *Store) unique() {
 	if len(r.data) < 2 {
 		return
 	}
@@ -110,13 +110,13 @@ func (r *Cache) unique() {
 }
 
 // Get returns the most recent utilization values or an empty slice if
-// the cache is still empty.
-func (r *Cache) Get() []*gym.Utilization {
+// the store is still empty.
+func (r *Store) Get(_ context.Context) ([]*gym.Utilization, error) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 
 	result := make([]*gym.Utilization, len(r.data))
 	copy(result, r.data)
 
-	return result
+	return result, nil
 }
