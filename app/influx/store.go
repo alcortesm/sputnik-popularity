@@ -19,12 +19,12 @@ func init() {
 }
 
 type Config struct {
-	URL         string `required:"true"`
-	TokenWrite  string `required:"true" split_words:"true"`
-	TokenRead   string `required:"true" split_words:"true"`
-	Org         string `default:"tsDemo"`
-	Bucket      string `default:"sputnik_popularity"`
-	Measurement string `default:"capacity_utilization"`
+	URL         string
+	TokenWrite  string
+	TokenRead   string
+	Org         string
+	Bucket      string
+	Measurement string
 }
 
 const (
