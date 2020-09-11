@@ -59,7 +59,10 @@ var chart = new Chart(ctx, {
             xAxes: [{
                 type: 'time',
                 time: {
-                    unit: 'day'
+                    unit: 'day',
+                    displayFormats: {
+                        day: 'dddd, MMM D'
+                    }
                 }
             }],
             yAxes: [{
