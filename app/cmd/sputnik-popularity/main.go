@@ -22,56 +22,112 @@ import (
 	"github.com/alcortesm/sputnik-popularity/pkg/httpdeco"
 )
 
-type Config struct {
-	// TODO: Influx and Scrape config should be defined here so the env
-	// is straighforward and to avoid env tags in inner packages.
-	InfluxDB influx.Config
-	Scrape   scrape.Config
-	Recent   RecentConfig
-	Web      WebConfig
-	Refresh  RefreshConfig
+type config struct {
+	Scrape   scrapeConfig
+	InfluxDB influxConfig
+	Recent   recentConfig
+	Web      webConfig
+	Refresh  refreshConfig
 }
 
-type RecentConfig struct {
+type scrapeConfig struct {
+	URL     string        `required:"true"`
+	GymName string        `required:"true" split_words:"true"`
+	GymID   int           `required:"true" split_words:"true"`
+	Period  time.Duration `default:"10m"`
+	Timeout time.Duration `default:"10s"`
+}
+
+type influxConfig struct {
+	URL         string `required:"true"`
+	TokenWrite  string `required:"true" split_words:"true"`
+	TokenRead   string `required:"true" split_words:"true"`
+	Org         string `default:"tsDemo"`
+	Bucket      string `default:"sputnik_popularity"`
+	Measurement string `default:"capacity_utilization"`
+}
+
+type recentConfig struct {
 	Retention time.Duration `default:"168h" split_words:"true"` // 168h is 1 week
 }
 
-type WebConfig struct {
+type webConfig struct {
 	Port            int           `default:"8080"`
 	ReadTimeout     time.Duration `default:"10s"`
 	WriteTimeout    time.Duration `default:"10s"`
 	ShutdownTimeout time.Duration `default:"10s"`
 }
 
-type RefreshConfig struct {
+type refreshConfig struct {
 	Period time.Duration `default:"1h" split_words:"true"`
 }
 
 func main() {
+	const (
+		failMsg = "failed to start app"
+		stopMsg = "stopping the app"
+	)
+
 	logger := log.New(os.Stdout, "app ",
 		log.Ldate|log.Ltime|log.LUTC|log.Lmsgprefix)
 
-	var config Config
-	envPrefix := "SPUTNIK"
-	err := envconfig.Process(envPrefix, &config)
-	if err != nil {
-		logger.Fatalf("failed to start app: processign env vars: %v", err)
+	// get config from environment variables
+	var envConfig config
+	{
+		envPrefix := "SPUTNIK"
+
+		err := envconfig.Process(envPrefix, &envConfig)
+		if err != nil {
+			logger.Fatalf("%s: processign env vars: %v", failMsg, err)
+		}
 	}
 
+	// a context that will canceled by an interrupt signal,
+	// we will use it to gracefully shutdown all tasks.
 	signalCtx, cancel := signalContext(syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	recentStore, err := recent.NewStore(config.Recent.Retention)
-	if err != nil {
-		logger.Fatalf("failed to start app: creating a recent store: %v", err)
+	// a scraper to gather the data from the gym.
+	var scraper *scrape.Scraper
+	{
+		client := &http.Client{
+			Timeout: envConfig.Scrape.Timeout * time.Second,
+		}
+
+		cfg := scrape.Config{
+			URL:     envConfig.Scrape.URL,
+			GymName: envConfig.Scrape.GymName,
+			GymID:   envConfig.Scrape.GymID,
+		}
+
+		scraper = scrape.NewScraper(
+			logger,
+			client,
+			time.Now,
+			cfg,
+		)
 	}
 
-	influxStore, cancel := influx.NewStore(config.InfluxDB)
-	defer cancel()
+	// a permanent database to store the data from the gym.
+	var influxStore *influx.Store
+	{
+		c := influx.Config(envConfig.InfluxDB)
+		var cancel func()
+
+		influxStore, cancel = influx.NewStore(c)
+		defer cancel()
+	}
+
+	// a temporary storage to keep the most recent data from the gym.
+	recentStore, err := recent.NewStore(envConfig.Recent.Retention)
+	if err != nil {
+		logger.Fatalf("%s: creating a recent store: %v", failMsg, err)
+	}
 
 	// channel where the scraper sends the scraped data
 	scrapedCh := make(chan *gym.Utilization)
 
+	// run all tasks within an error group
 	g, ctx := errgroup.WithContext(signalCtx)
 
 	// launch a scraper of gym utilization data
@@ -79,13 +135,15 @@ func main() {
 		return startScraping(
 			ctx,
 			logger,
-			config.Scrape,
-			time.Tick(config.Scrape.Period),
+			scraper,
+			time.Tick(envConfig.Scrape.Period),
 			scrapedCh,
 		)
 	})
 
-	// launch a processor for the scraped data
+	// launch a processor for the scraped data:
+	// - update the database
+	// - update the recent store
 	g.Go(func() error {
 		return processScrapedData(
 			ctx,
@@ -101,20 +159,20 @@ func main() {
 		return launchWebServer(
 			ctx,
 			logger,
-			config.Web,
+			envConfig.Web,
 			recentStore,
 		)
 	})
 
-	// refresh the recent from the DB regularly
+	// refresh the recent store from the DB regularly
 	g.Go(func() error {
 		return refreshRecentWithDB(
 			ctx,
 			logger,
-			config.Recent.Retention,
+			envConfig.Recent.Retention,
 			influxStore,
 			recentStore,
-			time.Tick(config.Refresh.Period),
+			time.Tick(envConfig.Refresh.Period),
 		)
 	})
 	logger.Println("starting app...")
@@ -151,23 +209,14 @@ func signalContext(signals ...os.Signal) (
 func startScraping(
 	ctx context.Context,
 	logger *log.Logger,
-	config scrape.Config,
+	scraper *scrape.Scraper,
 	trigger <-chan time.Time,
-	scraped chan<- *gym.Utilization,
+	output chan<- *gym.Utilization,
 ) error {
 	const prefix = "scraping"
 
 	logger.Printf("%s: starting...", prefix)
 	defer logger.Printf("%s: stopped", prefix)
-
-	client := &http.Client{Timeout: config.Timeout * time.Second}
-
-	scraper := scrape.NewScraper(
-		logger,
-		client,
-		time.Now,
-		config,
-	)
 
 	do := func() {
 		u, err := scraper.Scrape(ctx)
@@ -176,7 +225,7 @@ func startScraping(
 			return
 		}
 
-		scraped <- u
+		output <- u
 	}
 
 	do()
@@ -243,15 +292,15 @@ func processScrapedData(
 func launchWebServer(
 	ctx context.Context,
 	logger *log.Logger,
-	config WebConfig,
-	latest web.Getter,
+	config webConfig,
+	recentStore web.Getter,
 ) error {
 	const prefix = "web server"
 
 	logger.Printf("%s: starting at port %d...\n", prefix, config.Port)
 	defer logger.Printf("%s: stopped\n", prefix)
 
-	w := web.Web{Recent: latest}
+	w := web.Web{Recent: recentStore}
 
 	http.Handle("/popularity.html", httpdeco.Decorate(
 		w.PopularityHandler(),

@@ -14,11 +14,9 @@ import (
 )
 
 type Config struct {
-	URL     string        `required:"true"`
-	GymName string        `required:"true" split_words:"true"`
-	GymID   int           `required:"true" split_words:"true"`
-	Period  time.Duration `default:"10m"`
-	Timeout time.Duration `default:"10s"`
+	URL     string
+	GymName string
+	GymID   int
 }
 
 type Scraper struct {
