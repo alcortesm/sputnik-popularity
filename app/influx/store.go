@@ -34,7 +34,6 @@ const (
 
 type Store struct {
 	config   Config
-	bucket   string
 	writeAPI api.WriteAPIBlocking
 	queryAPI api.QueryAPI
 }

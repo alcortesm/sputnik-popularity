@@ -18,11 +18,10 @@ import (
 )
 
 const (
-	shutdownTimeoutSeconds   = 10
-	readTimeoutSeconds       = 10
-	writeTimeoutSeconds      = 10
-	idleTimeoutSeconds       = 30
-	readHeaderTimeoutSeconds = 2
+	shutdownTimeoutSeconds = 10
+	readTimeoutSeconds     = 10
+	writeTimeoutSeconds    = 10
+	idleTimeoutSeconds     = 30
 )
 
 type config struct {
