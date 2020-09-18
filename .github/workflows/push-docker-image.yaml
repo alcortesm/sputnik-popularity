@@ -39,6 +39,7 @@ jobs:
       run: |-
         docker build \
           --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" \
+          --target "run-app" \
           .
 
     # Push the Docker image to Google Container Registry
