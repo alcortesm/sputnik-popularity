@@ -24,10 +24,12 @@ Hardware:
   - Scraper and Web front-end: running as a single docker container on [Google Cloud Platform](https://cloud.google.com) (GCP) in South Carolina, USA.
 
 Develop/Deploy process:
+
   - The master branch contains the version of the project currently running in production.
   - I develop all new functionalities and bug fixes as separate git branches; they get merged into master via Github pull requests.
   - I verify all tests are passing on every pull request using [CircleCI](https://circleci.com). You can do the same locally using `make test`.
   - I use Github Actions to lint every pull request using [golangci-lint](https://github.com/golangci/golangci-lint). You do the same locally using `make lint`.
+  - When a pull request is approved and merged into master, a Github Action creates the new docker image for the project and push it to my private Google Cloud Registry.
 
 ## How to run the tests
 
