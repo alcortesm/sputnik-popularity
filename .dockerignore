@@ -5,6 +5,7 @@
 .circleci
 .dockerignore
 .git
+.github
 Dockerfile
 LICENSE
 makefile
