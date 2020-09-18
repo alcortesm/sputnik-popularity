@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - master
-      - push-docker-image-when-merging-to-master
 
 env:
   PROJECT_ID: ${{ secrets.GCE_PROJECT_ID }}
