@@ -9,13 +9,6 @@ allows to see how popular it has been over the past few days.
 It scrapes my gym's capacity utilization endpoint and store the data in an InfluxDB instance.
 A web front end shows the utilization during the last couple of weeks.
 
-## How to run the tests
-
-There are 3 types of tests: unit, integration and e2e.
-You can run all of them with `make test`.
-
-To run them individually use `make unit`, `make integration` or `make e2e`.
-
 ## My Production Environment
 
 The main restriction when building my production environemnt for this project
@@ -33,7 +26,15 @@ Hardware:
 Develop/Deploy process:
   - The master branch contains the version of the project currently running in production.
   - I develop all new functionalities and bug fixes as separate git branches; they get merged into master via Github pull requests.
-  - I use [CircleCI](https://circleci.com) to automatically verify that all tests pass before merging a branch to master.
+  - I verify all tests are passing on every pull request using [CircleCI](https://circleci.com). You can do the same locally using `make test`.
+  - I use Github Actions to lint every pull request using [golangci-lint](https://github.com/golangci/golangci-lint). You do the same locally using `make lint`.
+
+## How to run the tests
+
+There are 3 types of tests: unit, integration and e2e.
+You can run all of them with `make test`.
+
+To run them individually use `make unit`, `make integration` or `make e2e`.
 
 ## How to run the project
 
