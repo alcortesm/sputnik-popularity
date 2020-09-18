@@ -36,13 +36,13 @@ COPY --from=golang:1.15.1-buster \
     /etc/ssl/certs/ca-certificates.crt \
     /etc/ssl/certs/ca-certificates.crt
 
-# Creates a single layer image to run the app.
-FROM with-certs AS run-app
-COPY --from=build-app /bin/build /bin/runme
-ENTRYPOINT ["/bin/runme"]
-
 # Creates a single layer image to run the scrapeme helper for the e2e
 # tests.
 FROM scratch AS run-scrapeme
 COPY --from=build-scrapeme /bin/build /bin/runme
+ENTRYPOINT ["/bin/runme"]
+
+# Creates a single layer image to run the app.
+FROM with-certs AS run-app
+COPY --from=build-app /bin/build /bin/runme
 ENTRYPOINT ["/bin/runme"]
