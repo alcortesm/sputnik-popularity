@@ -17,15 +17,22 @@ To run them individually use `make unit`, `make integration` or `make e2e`.
 
 ## My Production Environment
 
+The main restriction when building my production environemnt for this project
+is that everything should be free (as in beer).
+
 Software:
+
   - The Git repository is available on [Github](https://github.com/alcortesm/sputnik-popularity).
 
 Hardware:
 
-  - Database: an InfluxDB instance running on Amazon Web Services (AWS) in Germany, EU.
-  - Scraper and Web front-end: running as a single docker container on Google Cloud Platform (GCP) in South Carolina, USA.
+  - Database: an InfluxDB instance running on [Amazon Web Services](https://aws.amazon.com) (AWS) in Germany, EU.
+  - Scraper and Web front-end: running as a single docker container on [Google Cloud Platform](https://cloud.google.com) (GCP) in South Carolina, USA.
 
-I use [CircleCI](https://circleci.com) to run all tests on pull requests before merging to master.
+Develop/Deploy process:
+  - The master branch contains the version of the project currently running in production.
+  - I develop all new functionalities and bug fixes as separate git branches; they get merged into master via Github pull requests.
+  - I use [CircleCI](https://circleci.com) to automatically verify that all tests pass before merging a branch to master.
 
 ## How to run the project
 
