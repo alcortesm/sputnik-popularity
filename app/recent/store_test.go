@@ -149,7 +149,9 @@ func remembersRecentValues(t *testing.T) {
 			}
 
 			for _, b := range test.batches {
-				store.Add(ctx, b...)
+				if err := store.Add(ctx, b...); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			got, err := store.Get(ctx)
@@ -247,7 +249,9 @@ func forgetsOldValues(t *testing.T) {
 			}
 
 			for _, b := range test.batches {
-				store.Add(ctx, b...)
+				if err := store.Add(ctx, b...); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			got, err := store.Get(ctx)
@@ -350,7 +354,9 @@ func overwritesValues(t *testing.T) {
 			}
 
 			for _, b := range test.batches {
-				store.Add(ctx, b...)
+				if err := store.Add(ctx, b...); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			got, err := store.Get(ctx)
@@ -403,7 +409,9 @@ func allMixed(t *testing.T) {
 	}
 
 	for _, b := range batches {
-		store.Add(ctx, b...)
+		if err := store.Add(ctx, b...); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	got, err := store.Get(ctx)

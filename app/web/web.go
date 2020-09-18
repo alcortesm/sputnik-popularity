@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"time"
 
@@ -21,6 +22,7 @@ var tmpl = template.Must(
 		Parse(chartTemplate))
 
 type Web struct {
+	Logger *log.Logger
 	Recent Getter
 }
 
@@ -32,14 +34,18 @@ type Getter interface {
 func (w Web) PopularityHandler() http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-type", "text/html")
-		rw.Write([]byte(popularity))
+		if _, err := rw.Write([]byte(popularity)); err != nil {
+			w.Logger.Printf("error writing HTTP response: %v", err)
+		}
 	})
 }
 
 func (w Web) StyleHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-type", "text/css")
-		w.Write([]byte(css))
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Content-type", "text/css")
+		if _, err := rw.Write([]byte(css)); err != nil {
+			w.Logger.Printf("error writing HTTP response: %v", err)
+		}
 	})
 }
 

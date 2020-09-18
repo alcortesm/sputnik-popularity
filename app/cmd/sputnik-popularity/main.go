@@ -243,8 +243,6 @@ func startScraping(
 
 		do()
 	}
-
-	return nil
 }
 
 func processScrapedData(
@@ -300,7 +298,10 @@ func launchWebServer(
 	logger.Printf("%s: starting at port %d...\n", prefix, config.Port)
 	defer logger.Printf("%s: stopped\n", prefix)
 
-	w := web.Web{Recent: recentStore}
+	w := web.Web{
+		Logger: logger,
+		Recent: recentStore,
+	}
 
 	http.Handle("/popularity.html", httpdeco.Decorate(
 		w.PopularityHandler(),
@@ -393,8 +394,6 @@ func refreshRecentWithDB(
 
 		do()
 	}
-
-	return nil
 }
 
 // getSincer knows how to retrieve gym utilization data since a certain

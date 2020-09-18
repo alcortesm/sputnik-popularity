@@ -73,3 +73,7 @@ e2e-clean:
 .PHONY: docker-image
 docker-image:
 	docker build -t sputnik --target=run-app .
+
+.PHONY: lint
+lint:
+	golangci-lint run ./...
