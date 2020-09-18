@@ -15,6 +15,18 @@ You can run all of them with `make test`.
 
 To run them individually use `make unit`, `make integration` or `make e2e`.
 
+## My Production Environment
+
+Software:
+  - The Git repository is available on [Github](https://github.com/alcortesm/sputnik-popularity).
+
+Hardware:
+
+  - Database: an InfluxDB instance running on Amazon Web Services (AWS) in Germany, EU.
+  - Scraper and Web front-end: running as a single docker container on Google Cloud Platform (GCP) in South Carolina, USA.
+
+I use [CircleCI](https://circleci.com) to run all tests on pull requests before merging to master.
+
 ## How to run the project
 
 Some environment variables are required to run the project:
