@@ -1,7 +1,7 @@
 # This workflow will build a docker image and push it to Google Container
 # Registry.
 
-name: Build and push docker image to Google Container Registry
+name: Push docker image
 
 on:
   push:
@@ -26,23 +26,23 @@ jobs:
     - name: "Setup gcloud CLI"
       uses: GoogleCloudPlatform/github-actions/setup-gcloud@0.1.3
       with:
-        service_account_key: ${{ secrets.GCE_SA_KEY }}
+        service_account_key: ${{ secrets.GCE_SA_KEY_REGISTRY_PUSH }}
         project_id: ${{ secrets.GCE_PROJECT_ID }}
 
     # Configure Docker to use the gcloud command-line tool as a credential
     # helper for authentication
     - run: |-
-        gcloud --quiet auth configure-docker
+        gcloud --quiet auth configure-docker gcr.io
 
     # Build the Docker image
     - name: Build
       run: |-
         docker build \
-          --tag "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA" \
-          --target "run-app" \
+          --tag gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA \
+          --target run-app \
           .
 
     # Push the Docker image to Google Container Registry
     - name: Push
       run: |-
-        docker push "gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
+        docker push gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
