@@ -10,8 +10,17 @@ on:
       - CD
 
 env:
-  PROJECT_ID: ${{ secrets.GCE_PROJECT_ID }}
-  IMAGE: sputnik
+  DOCKER_IMAGE: sputnik
+  DOCKER_CONTAINER_NAME: sputnik
+  GCE_INSTANCE_NAME: ${{ secrets.GCE_INSTANCE_NAME }}
+  GCE_INSTANCE_ZONE: ${{ secrets.GCE_INSTANCE_ZONE }}
+  GCE_PROJECT_ID: ${{ secrets.GCE_PROJECT_ID }}
+  SPUTNIK_INFLUXDB_URL: ${{ secrets.SPUTNIK_INFLUXDB_URL }}
+  SPUTNIK_INFLUXDB_TOKEN_WRITE: ${{ secrets.SPUTNIK_INFLUXDB_TOKEN_WRITE }}
+  SPUTNIK_INFLUXDB_TOKEN_READ: ${{ secrets.SPUTNIK_INFLUXDB_TOKEN_READ }}
+  SPUTNIK_SCRAPE_URL: ${{ secrets.SPUTNIK_SCRAPE_URL }}
+  SPUTNIK_SCRAPE_GYM_NAME: ${{ secrets.SPUTNIK_SCRAPE_GYM_NAME }}
+  SPUTNIK_SCRAPE_GYM_ID: ${{ secrets.SPUTNIK_SCRAPE_GYM_ID }}
 
 jobs:
   setup-build-push:
@@ -35,20 +44,54 @@ jobs:
         gcloud --quiet auth configure-docker gcr.io
 
     # Build the Docker image
-    - name: Build
+    - name: Build docker image
       run: |-
         docker build \
-          --tag gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA \
+          --tag gcr.io/$GCE_PROJECT_ID/$DOCKER_IMAGE:$GITHUB_SHA \
           --target run-app \
           .
 
     # Push the Docker image to Google Container Registry
-    - name: Push
+    #
+    # Roles required:
+    #   - Storage Admin
+    - name: Push docker image
       run: |-
-        docker push gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
+        docker push gcr.io/$GCE_PROJECT_ID/$DOCKER_IMAGE:$GITHUB_SHA
 
-    - name: List running containers
+    - name: Pull docker image
       run: |-
-        gcloud compute ssh {{ GCE_INSTANCE_NAME }} \
-          --command="docker ps"
+        gcloud compute ssh $GCE_INSTANCE_NAME \
+            --zone=$GCE_INSTANCE_ZONE \
+            --command="docker pull gcr.io/$GCE_PROJECT_ID/$DOCKER_IMAGE:$GITHUB_SHA"
 
+    # Stop and delete the container running the old image and
+    # run a new container with the newly pushed image
+    #
+    # Roles required for the service account:
+    #  - Compute Viewer
+    #  - Service Account User
+    #
+    # Roles required on the VM instance:
+    #  - Compute Instance Admin (v1)
+    - name: Run docker image in a container
+      run: |-
+        echo gcr.io/$GCE_PROJECT_ID/$DOCKER_IMAGE:$GITHUB_SHA
+        docker images
+        gcloud compute ssh $GCE_INSTANCE_NAME \
+            --zone=$GCE_INSTANCE_ZONE \
+            --command="\
+              docker stop $DOCKER_CONTAINER_NAME && \
+              docker container rm $DOCKER_CONTAINER_NAME && \
+              docker run \
+                --detach \
+                --env SPUTNIK_INFLUXDB_URL=$SPUTNIK_INFLUXDB_URL \
+                --env SPUTNIK_INFLUXDB_TOKEN_WRITE=$SPUTNIK_INFLUXDB_TOKEN_WRITE \
+                --env SPUTNIK_INFLUXDB_TOKEN_READ=$SPUTNIK_INFLUXDB_TOKEN_READ \
+                --env SPUTNIK_SCRAPE_URL=$SPUTNIK_SCRAPE_URL \
+                --env SPUTNIK_SCRAPE_GYM_NAME=$SPUTNIK_SCRAPE_GYM_NAME \
+                --env SPUTNIK_SCRAPE_GYM_ID=$SPUTNIK_SCRAPE_GYM_ID \
+                --name $DOCKER_CONTAINER_NAME \
+                --log-driver=gcplogs \
+                --publish 8080:8080 \
+                gcr.io/$GCE_PROJECT_ID/$DOCKER_IMAGE:$GITHUB_SHA"
